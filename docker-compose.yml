@@ -21,7 +21,7 @@
     volumes:
       - .:/app
     working_dir: /app
-    command: ["python", "-c", "print('CDL app container running')"]
+    command: ["sh", "-lc", "tail -f /dev/null"]
 
 volumes:
   cdl_pgdata:

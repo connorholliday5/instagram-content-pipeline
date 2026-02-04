@@ -9,11 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
   && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml /app/pyproject.toml
-
-RUN pip install --no-cache-dir -U pip \
- && pip install --no-cache-dir .
-
 COPY . /app
 
-CMD ["python", "-c", "print('Comic Data Lab container is ready')"]
+RUN pip install --no-cache-dir -U pip \
+ && pip install --no-cache-dir -e ".[dev]"
+
+# Keep container alive for docker compose up; we use `docker compose run` for commands
+CMD ["sh", "-lc", "tail -f /dev/null"]
