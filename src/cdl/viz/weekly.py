@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import json
-from collections import Counter
-from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Tuple
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -12,23 +10,26 @@ import pandas as pd
 def load_issues(path: Path) -> pd.DataFrame:
     data = json.loads(path.read_text(encoding="utf-8"))
     df = pd.DataFrame(data)
-    # Normalize empties
+
+    # Normalize missing columns + nulls
     for c in ["publisher", "series_name", "issue_number", "title", "release_date", "detail_url"]:
-        if c in df.columns:
-            df[c] = df[c].fillna("")
+        if c not in df.columns:
+            df[c] = ""
+        df[c] = df[c].fillna("")
+
     return df
 
 def top_publishers(df: pd.DataFrame, n: int = 10) -> pd.DataFrame:
-    if "publisher" not in df.columns:
-        return pd.DataFrame({"publisher": [], "count": []})
-    counts = df["publisher"].replace("", "(unknown)").value_counts().head(n)
-    return counts.reset_index().rename(columns={"index": "publisher", "publisher": "count"})
+    s = df["publisher"].replace("", "(unknown)")
+    vc = s.value_counts().head(n)
+    out = pd.DataFrame({"publisher": vc.index.astype(str), "count": vc.values.astype(int)})
+    return out
 
 def top_series(df: pd.DataFrame, n: int = 10) -> pd.DataFrame:
-    if "series_name" not in df.columns:
-        return pd.DataFrame({"series_name": [], "count": []})
-    counts = df["series_name"].replace("", "(unknown)").value_counts().head(n)
-    return counts.reset_index().rename(columns={"index": "series_name", "series_name": "count"})
+    s = df["series_name"].replace("", "(unknown)")
+    vc = s.value_counts().head(n)
+    out = pd.DataFrame({"series_name": vc.index.astype(str), "count": vc.values.astype(int)})
+    return out
 
 def save_bar_chart(df_counts: pd.DataFrame, label_col: str, value_col: str, title: str, out_path: Path) -> None:
     labels = df_counts[label_col].tolist()
@@ -51,7 +52,6 @@ def save_instagram_card(
     top_series: Tuple[str, int] | None,
     out_path: Path,
 ) -> None:
-    # Instagram portrait: 1080x1350 px is standard (4:5)
     dpi = 150
     w_in = 1080 / dpi
     h_in = 1350 / dpi
@@ -59,49 +59,41 @@ def save_instagram_card(
     plt.figure(figsize=(w_in, h_in), dpi=dpi)
     plt.axis("off")
 
-    lines = []
-    lines.append("COMIC DATA LAB")
-    lines.append("")
-    lines.append(f"Weekly Releases")
-    lines.append(f"{start_date}  {end_date}")
-    lines.append("")
-    lines.append(f"Total issues: {total}")
+    lines = [
+        "COMIC DATA LAB",
+        "",
+        "Weekly Releases",
+        f"{start_date}  {end_date}",
+        "",
+        f"Total issues: {total}",
+    ]
     if top_pub:
         lines.append(f"Top publisher: {top_pub[0]} ({top_pub[1]})")
     if top_series:
         lines.append(f"Top series: {top_series[0]} ({top_series[1]})")
-    lines.append("")
-    lines.append("Source: ComicVine")
-    lines.append("Pipeline: cached + rate-limited ingest")
+    lines += ["", "Source: ComicVine", "Pipeline: cached + rate-limited ingest"]
 
-    # Centered text block
-    plt.text(
-        0.5,
-        0.5,
-        "\n".join(lines),
-        ha="center",
-        va="center",
-        fontsize=26,
-        wrap=True,
-    )
+    plt.text(0.5, 0.5, "\n".join(lines), ha="center", va="center", fontsize=26, wrap=True)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
     plt.close()
 
 def write_summary(df: pd.DataFrame, out_path: Path, start_date: str, end_date: str) -> Dict[str, Any]:
-    total = int(len(df))
     pubs = df["publisher"].replace("", "(unknown)").value_counts()
     series = df["series_name"].replace("", "(unknown)").value_counts()
+
+    top_pubs = top_publishers(df, n=10).to_dict(orient="records")
+    top_ser = top_series(df, n=10).to_dict(orient="records")
 
     summary = {
         "start_date": start_date,
         "end_date": end_date,
-        "total": total,
+        "total": int(len(df)),
         "unique_publishers": int(pubs.shape[0]),
         "unique_series": int(series.shape[0]),
-        "top_publishers": top_publishers(df, n=10).to_dict(orient="records"),
-        "top_series": top_series(df, n=10).to_dict(orient="records"),
+        "top_publishers": top_pubs,
+        "top_series": top_ser,
     }
 
     out_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
