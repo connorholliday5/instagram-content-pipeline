@@ -30,7 +30,7 @@ def _get_issues_page(http: HttpClient, api_key: str, page: int, date_range: Tupl
         "api_key": api_key,
         "format": "json",
         "sort": "cover_date:asc",
-        "offset": (page - 1) * limit, "limit": limit,
+        "offset": (page - 1) * 100, "limit": 100,
         "filter": f"cover_date:{start}|{end}",
         # include volume so we can enrich publisher via volume endpoint
         "field_list": "id,name,issue_number,cover_date,description,site_detail_url,volume",
@@ -124,5 +124,6 @@ def fetch_releases(
         )
 
     return issues
+
 
 
