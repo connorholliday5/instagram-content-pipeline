@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 from pathlib import Path
@@ -30,7 +30,7 @@ def _get_issues_page(http: HttpClient, api_key: str, page: int, date_range: Tupl
         "api_key": api_key,
         "format": "json",
         "sort": "cover_date:asc",
-        "page": page,
+        "offset": (page - 1) * limit, "limit": limit,
         "filter": f"cover_date:{start}|{end}",
         # include volume so we can enrich publisher via volume endpoint
         "field_list": "id,name,issue_number,cover_date,description,site_detail_url,volume",
@@ -124,3 +124,4 @@ def fetch_releases(
         )
 
     return issues
+
