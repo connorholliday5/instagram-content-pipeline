@@ -59,3 +59,18 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+@app.command()
+def ingest(
+    source: str = typer.Option("comicvine", "--source", "-s"),
+    start: str = typer.Option(..., "--start"),
+    end: str = typer.Option(..., "--end"),
+) -> None:
+    """
+    Ingest releases from a source in a date range and write artifacts into var/outputs/YYYY-MM-DD/.
+    Example:
+      python -m cdl ingest --source comicvine --start 2026-02-01 --end 2026-02-07
+    """
+    from cdl.ingest.runner import run_ingest
+    out_dir = run_ingest(source=source, start_date=start, end_date=end)
+    print(f"[bold green]Ingest complete[/bold green] -> {out_dir}")
