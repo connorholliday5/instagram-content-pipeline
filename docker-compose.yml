@@ -1,0 +1,27 @@
+﻿services:
+  db:
+    image: postgres:16
+    container_name: cdl-postgres
+    environment:
+      POSTGRES_DB: cdl
+      POSTGRES_USER: cdl
+      POSTGRES_PASSWORD: cdl
+    ports:
+      - "5432:5432"
+    volumes:
+      - cdl_pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    container_name: cdl-app
+    depends_on:
+      - db
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: ["python", "-c", "print('CDL app container running')"]
+
+volumes:
+  cdl_pgdata:
