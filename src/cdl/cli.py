@@ -74,3 +74,53 @@ def ingest(
     from cdl.ingest.runner import run_ingest
     out_dir = run_ingest(source=source, start_date=start, end_date=end)
     print(f"[bold green]Ingest complete[/bold green] -> {out_dir}")
+
+@app.command("viz-weekly")
+def viz_weekly() -> None:
+    """
+    Generate weekly summary JSON + charts + an Instagram-ready card from the latest output folder.
+    Expects ingest_summary.json to exist in var/outputs/YYYY-MM-DD/.
+    """
+    import json
+    from pathlib import Path
+    import os
+    from cdl.viz.weekly import load_issues, write_summary, save_bar_chart, save_instagram_card, top_publishers, top_series
+
+    out_root = Path(os.getenv("CDL_OUTPUT_DIR", "./var/outputs"))
+    # Pick latest folder by name (YYYY-MM-DD lexicographic works)
+    folders = sorted([p for p in out_root.iterdir() if p.is_dir()])
+    if not folders:
+        raise RuntimeError(f"No output folders found in {out_root}")
+    out_dir = folders[-1]
+
+    ingest_summary = out_dir / "ingest_summary.json"
+    if not ingest_summary.exists():
+        raise RuntimeError(f"Missing {ingest_summary}. Run ingestion first.")
+
+    meta = json.loads(ingest_summary.read_text(encoding="utf-8"))
+    artifact_path = Path(meta["artifact"])
+    start_date = meta["start_date"]
+    end_date = meta["end_date"]
+
+    df = load_issues(artifact_path)
+
+    # Write summary
+    summary_path = out_dir / "weekly_summary.json"
+    summary = write_summary(df, summary_path, start_date, end_date)
+
+    # Charts
+    pubs_df = top_publishers(df, n=12)
+    series_df = top_series(df, n=12)
+
+    if len(pubs_df) > 0:
+        save_bar_chart(pubs_df, "publisher", "count", "Top publishers (weekly releases)", out_dir / "top_publishers.png")
+
+    if len(series_df) > 0:
+        save_bar_chart(series_df, "series_name", "count", "Top series (weekly releases)", out_dir / "top_series.png")
+
+    # Instagram card
+    top_pub = (summary["top_publishers"][0]["publisher"], summary["top_publishers"][0]["count"]) if summary["top_publishers"] else None
+    top_ser = (summary["top_series"][0]["series_name"], summary["top_series"][0]["count"]) if summary["top_series"] else None
+    save_instagram_card(start_date, end_date, summary["total"], top_pub, top_ser, out_dir / "ig_weekly_card.png")
+
+    print(f"[bold green]Viz complete[/bold green] -> {out_dir}")
