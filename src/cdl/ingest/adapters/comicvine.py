@@ -125,3 +125,4 @@ def fetch_releases(
 
     return issues
 
+
