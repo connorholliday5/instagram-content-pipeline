@@ -124,3 +124,36 @@ def viz_weekly() -> None:
     save_instagram_card(start_date, end_date, summary["total"], top_pub, top_ser, out_dir / "ig_weekly_card.png")
 
     print(f"[bold green]Viz complete[/bold green] -> {out_dir}")
+
+
+@app.command("publish-ig")
+def publish_ig(
+    caption: str = typer.Option("", "--caption", help="Caption text to publish with the IG card."),
+    dry_run: bool = typer.Option(True, "--dry-run/--no-dry-run", help="Validate credentials without posting."),
+) -> None:
+    """
+    Phase 3: Publish the latest ig_weekly_card.png to Instagram via Graph API.
+    Defaults to dry-run (credential validation only).
+    """
+    import os
+    from pathlib import Path
+    from cdl.utils.http import client
+    from cdl.publish.instagram import load_ig_env, validate_ig_connection, find_latest_ig_card
+
+    out_root = Path(os.getenv("CDL_OUTPUT_DIR", "./var/outputs"))
+    card_path = find_latest_ig_card(out_root)
+
+    ig = load_ig_env()
+    http = client(Path(os.getenv("CDL_CACHE_DIR", "./var/cache")))
+
+    info = validate_ig_connection(http, ig)
+    print(f"[bold green]IG validated[/bold green] -> @{info.get('username')} (id={info.get('id')})")
+    print(f"[bold]Card[/bold]: {card_path}")
+
+    if dry_run:
+        print("[yellow]Dry-run[/yellow]: not posting. Re-run with --no-dry-run after wiring upload.")
+        return
+
+    raise RuntimeError("Posting not implemented yet. Next Phase 3 step will add upload + publish.")
+
+
