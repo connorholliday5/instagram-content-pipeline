@@ -1,0 +1,22 @@
+# API clients
+requests==2.32.3
+anthropic==0.26.1
+
+# Image generation
+Pillow==10.3.0
+
+# Scheduling
+APScheduler==3.10.4
+
+# Environment
+python-dotenv==1.0.1
+
+# CLI
+click==8.1.7
+
+# Database
+peewee==3.17.5
+
+# Utilities
+tenacity==8.3.0
+rich==13.7.1
