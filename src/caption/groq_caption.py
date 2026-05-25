@@ -1,12 +1,14 @@
-import os
-import anthropic
+﻿import os
+import requests
 
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+MODEL = "llama-3.3-70b-versatile"
 
 SYSTEM_PROMPT = """You are the social media voice for @TheWatchtower_, an Instagram account covering 
 DC Comics, Marvel, indie comics, superhero film & TV, manga, and graphic novels.
 
-Tone: passionate, knowledgeable, slightly nerdy but accessible. Not cringe. No emojis overload.
+Tone: passionate, knowledgeable, slightly nerdy but accessible. Not cringe. No emoji overload.
 Always end with a call to action and 15-20 relevant hashtags on a new line.
 Keep captions under 300 words. Lead with a hook."""
 
@@ -34,10 +36,20 @@ Description: {description or 'No description available.'}
 
 {hint}"""
 
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=600,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-    return message.content[0].text.strip()
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": MODEL,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+        "max_tokens": 600,
+        "temperature": 0.85,
+    }
+
+    resp = requests.post(GROQ_URL, headers=headers, json=payload)
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"].strip()

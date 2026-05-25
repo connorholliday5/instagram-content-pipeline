@@ -11,7 +11,7 @@ def run_pipeline(dry_run: bool = True):
     from src.ingest.comicvine import fetch_weekly_issues
     from src.ingest.tmdb import fetch_upcoming_movies, fetch_airing_shows
     from src.generate.image_builder import build_image
-    from src.caption.claude_caption import generate_caption
+    from src.caption.groq_caption import generate_caption
     from src.post.instagram import post_image
     from src.db.models import init_db, Release, Post
     from datetime import datetime
