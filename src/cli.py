@@ -34,7 +34,6 @@ def run_pipeline(dry_run: bool = True):
         console.log(f"  [green]✓[/green] {title}")
 
         if not dry_run:
-            # NOTE: image_url must be a public URL in production
             post_image(str(img_path), caption, dry_run=False)
         else:
             console.print(f"    Caption preview: {caption[:100]}...")
@@ -68,6 +67,13 @@ def cli():
 def run(live):
     """Run the full weekly pipeline."""
     run_pipeline(dry_run=not live)
+
+
+@cli.command()
+def review():
+    """Launch the manual book review creator."""
+    from src.create.review import run_review
+    run_review()
 
 
 @cli.command()
