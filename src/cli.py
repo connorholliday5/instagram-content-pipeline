@@ -202,21 +202,36 @@ def run_weekly_carousel(dry_run: bool = True):
     if action == "edit":
         full_caption = Prompt.ask("Enter new caption")
 
-    # --- Final confirm ---
+    # --- Day override check ---
+    today_str = today.strftime("%A, %B %d")
     confirm = Prompt.ask(
-        f"\n[bold red]Post {len(slides)} slides to Instagram?[/bold red]",
+        f"\n[bold red]Post {len(slides)} slides to Instagram? (Scheduled: Tuesday)[/bold red]",
         choices=["yes", "no"],
         default="no"
     )
 
-    if confirm == "yes":
-        result = post_carousel(slides, full_caption, dry_run=dry_run)
-        if dry_run:
-            console.print("[yellow]DRY RUN complete — nothing posted.[/yellow]")
-        else:
-            console.log(f"[bold green]✓ Posted! Media ID: {result.get('media_id')}[/bold green]")
-    else:
+    if confirm != "yes":
         console.print("[yellow]Cancelled.[/yellow]")
+        console.rule("[bold red]Done[/bold red]")
+        return
+
+    if today.weekday() != 1:
+        override = Prompt.ask(
+            f"[yellow]Today is {today_str}, not Tuesday. Post anyway?[/yellow]",
+            choices=["yes", "no"],
+            default="no"
+        )
+        if override != "yes":
+            console.print("[yellow]Cancelled. Run on Tuesday or confirm override.[/yellow]")
+            console.rule("[bold red]Done[/bold red]")
+            return
+
+    # --- Post ---
+    result = post_carousel(slides, full_caption, dry_run=dry_run)
+    if dry_run:
+        console.print("[yellow]DRY RUN complete — nothing posted.[/yellow]")
+    else:
+        console.log(f"[bold green]✓ Posted! Media ID: {result.get('media_id')}[/bold green]")
 
     console.rule("[bold red]Done[/bold red]")
 
