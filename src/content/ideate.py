@@ -54,7 +54,7 @@ def _is_first_of_month_this_week(from_date: date = None) -> tuple[bool, date | N
 def _fetch_upcoming_comics(wednesday: date) -> list[str]:
     """Pull confirmed comics for upcoming Wednesday from Metron."""
     try:
-        from src.ingest.metron import fetch_top_weekly_issues, get_title
+        from src.ingest.comicvine import fetch_top_weekly_issues, get_title
         issues = fetch_top_weekly_issues(limit=10)
         return [get_title(i) for i in issues]
     except Exception:

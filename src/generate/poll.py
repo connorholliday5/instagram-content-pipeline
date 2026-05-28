@@ -184,10 +184,15 @@ def build_poll_story(poll: dict, poll_date: date) -> Path:
     draw.rectangle([(pad, 145),(W-pad, 148)], fill=ORANGE+(80,))
 
     # ── Category pill ──
-    cat = poll.get("category","").upper()[:28]
+    cat = poll.get("category","").upper()
     cat_f = _font("small", 34)
     bbox = draw.textbbox((0,0), cat, font=cat_f)
     tw = bbox[2]-bbox[0]
+    # If too wide, shrink font
+    if tw > W - pad*2 - 40:
+        cat_f = _font("small", 26)
+        bbox = draw.textbbox((0,0), cat, font=cat_f)
+        tw = bbox[2]-bbox[0]
     pill_x1 = cx - tw//2 - 24
     pill_x2 = cx + tw//2 + 24
     ov = Image.new("RGBA", SIZE, (0,0,0,0))

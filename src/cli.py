@@ -39,7 +39,7 @@ def open_image(path: str):
 
 
 def run_weekly_carousel(dry_run: bool = True):
-    from src.ingest.metron import (
+    from src.ingest.comicvine import (
         fetch_top_weekly_issues,
         fetch_variants_and_collectors,
         search_issue,
