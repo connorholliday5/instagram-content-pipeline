@@ -5,19 +5,25 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 MODEL = "llama-3.3-70b-versatile"
 
-SYSTEM_PROMPT = """You are the social media voice for @TheWatchtower_, an Instagram account covering 
-DC Comics, Marvel, indie comics, superhero film & TV, manga, and graphic novels.
+SYSTEM_PROMPT = """You are the voice behind @the.watch_tower on Instagram — a comic fan who goes to the LCS every Wednesday and actually reads the books. Your audience is 24+ comic readers, collectors, and casual fans.
 
-Tone: passionate, knowledgeable, slightly nerdy but accessible. Not cringe. No emoji overload.
-Always end with a call to action and 15-20 relevant hashtags on a new line.
-Keep captions under 300 words. Lead with a hook."""
+Tone: confident, knowledgeable, genuine. Not corny. Not corporate. Not cringe. Think someone who knows their stuff and talks like a real person — not a hype machine and not a journalist. Clean enough for everyone but never bland.
+
+STRICT RULES:
+- NEVER use any person's real name — not Connor, not anyone
+- Max 3 sentences
+- Never describe plot, story arcs, or what happens in the book — it just came out
+- Only use the exact titles and facts you are given — nothing invented
+- End with one short question to engage followers
+- No em dashes, no "dive into", no "navigate", no clichés
+- Hashtags go at the end — no duplicate hashtags ever"""
 
 CATEGORY_HINTS = {
-    "comics": "Focus on the story arc, creative team, and why fans should pick this up.",
-    "film":   "Hype the release, reference source material, and tease what fans can expect.",
-    "tv":     "Highlight the show, any notable casting or plot details, and the premiere date.",
-    "books":  "Emphasize the reading experience, art style if applicable, and who it's for.",
-    "manga":  "Note the volume, publisher, and any anime tie-in if relevant.",
+    "comics":  "Talk about the week's releases like a fan who's genuinely excited. Mention picks and collector items. Keep it tight.",
+    "film":    "Hype it, tie it to the source material if relevant. Short and punchy.",
+    "tv":      "Mention the show, keep it brief and genuine.",
+    "books":   "Talk about it like you just finished it and want people to read it.",
+    "manga":   "Note the volume and why it matters. Keep it tight.",
 }
 
 
@@ -28,13 +34,16 @@ def generate_caption(
     release_date: str = "",
 ) -> str:
     hint = CATEGORY_HINTS.get(category, "")
-    user_prompt = f"""Generate an Instagram caption for:
-Title: {title}
-Category: {category}
-Release date: {release_date or 'this week'}
-Description: {description or 'No description available.'}
+    user_prompt = f"""Write an Instagram caption for @the.watch_tower.
 
-{hint}"""
+Use ONLY these facts:
+Topic: {title}
+Release date: {release_date or "this week"}
+Details: {description or "No extra details."}
+
+Tone guide: {hint}
+
+Rules: no real names ever, max 3 sentences, no plot descriptions, end with a question."""
 
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
@@ -46,7 +55,7 @@ Description: {description or 'No description available.'}
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
-        "max_tokens": 600,
+        "max_tokens": 400,
         "temperature": 0.85,
     }
 

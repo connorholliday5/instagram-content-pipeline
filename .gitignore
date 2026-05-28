@@ -1,8 +1,32 @@
+# Environment
 .env
-.venv/
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
-output/
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Output — keep folder structure, ignore generated files
+output/*.jpg
+output/*.png
+output/*.jpeg
+output/weekly_plans/*.txt
+output/weekly_plans/*.json
+
+# Database
 *.db
+
+# OS
 .DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp

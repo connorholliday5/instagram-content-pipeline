@@ -180,3 +180,149 @@ def get_store_date(issue: dict | None) -> str:
     if not issue:
         return ""
     return issue.get("store_date") or issue.get("cover_date") or ""
+
+
+
+def fetch_collectors_items(start=None, limit: int = 4) -> list[dict]:
+    """
+    Detect collector-worthy issues: true #1s, facsimiles, anniversaries,
+    ratio variants, foil, omnibus. Excludes ongoing series issues.
+    """
+    after, before = _week_range(start)
+    results = []
+    seen: set[int] = set()
+
+    COLLECTOR_CHECKS = [
+        # True first issues — series number must be exactly 1
+        ("is_first_issue", ""),
+        (["facsimile"], "FACSIMILE EDITION"),
+        (["anniversary"], "ANNIVERSARY ISSUE"),
+        (["omnibus"], "OMNIBUS RELEASE"),
+        (["compendium"], "COMPENDIUM"),
+        (["hardcover hc"], "HARDCOVER EDITION"),
+        (["1:100"], "1:100 RATIO VARIANT"),
+        (["1:50"], "1:50 RATIO VARIANT"),
+        (["1:25"], "1:25 RATIO VARIANT"),
+        (["gold foil", "foil variant", "foil cover"], "FOIL VARIANT"),
+        (["director's cut", "special edition"], "SPECIAL EDITION"),
+        (["first appearance", "1st appearance"], "FIRST APPEARANCE"),
+    ]
+
+    for pub_name, pub_id in MAJOR_PUBLISHERS.items():
+        try:
+            issues = _fetch({
+                "store_date_range_after": after,
+                "store_date_range_before": before,
+                "publisher_id": pub_id,
+                "page_size": 50,
+            })
+            for issue in issues:
+                if issue["id"] in seen:
+                    continue
+                title = get_title(issue)
+                title_lower = title.lower()
+                issue_number = str(issue.get("number", "") or "").strip()
+
+                for check in COLLECTOR_CHECKS:
+                    keywords, reason = check
+
+                    # True #1 issues — number field must be "1"
+                    if keywords == "is_first_issue":
+                        if issue_number == "1":
+                            seen.add(issue["id"])
+                            results.append({
+                                "title": title,
+                                "cover_url": get_cover_url(issue),
+                                "publisher": get_publisher(issue),
+                                "reason": "#1 ISSUE",
+                            })
+                            break
+                    else:
+                        if any(kw in title_lower for kw in keywords):
+                            seen.add(issue["id"])
+                            results.append({
+                                "title": title,
+                                "cover_url": get_cover_url(issue),
+                                "publisher": get_publisher(issue),
+                                "reason": reason,
+                            })
+                            break
+        except Exception:
+            continue
+
+    return results[:limit]
+
+
+def fetch_variants_and_collectors(start=None, limit: int = 4) -> list[dict]:
+    """
+    Combined fetch: rare variants + collector key issues.
+    Returns merged list up to limit, deduped.
+    """
+    after, before = _week_range(start)
+    combined = []
+    seen: set[int] = set()
+
+    VARIANT_KEYWORDS = [
+        ("1:100", "1:100 RATIO"), ("1:50", "1:50 RATIO"),
+        ("1:25", "1:25 RATIO"), ("1:10", "1:10 RATIO"),
+        ("foil variant", "FOIL VARIANT"), ("foil cover", "FOIL VARIANT"),
+        ("gold foil", "GOLD FOIL"), ("virgin variant", "VIRGIN COVER"),
+        ("virgin cover", "VIRGIN COVER"), ("connecting", "CONNECTING CVR"),
+        ("sketch variant", "SKETCH COVER"),
+    ]
+
+    COLLECTOR_KEYWORDS_LIST = [
+        (["facsimile"], "FACSIMILE"),
+        (["anniversary"], "ANNIVERSARY"),
+        (["omnibus"], "OMNIBUS"),
+        (["compendium"], "COMPENDIUM"),
+        (["first appearance", "1st appearance"], "FIRST APPEARANCE"),
+        (["special edition"], "SPECIAL EDITION"),
+    ]
+
+    for pub_name, pub_id in MAJOR_PUBLISHERS.items():
+        try:
+            issues = _fetch({
+                "store_date_range_after": after,
+                "store_date_range_before": before,
+                "publisher_id": pub_id,
+                "page_size": 50,
+            })
+            for issue in issues:
+                if issue["id"] in seen:
+                    continue
+                title = get_title(issue)
+                title_lower = title.lower()
+                issue_number = str(issue.get("number", "") or "").strip()
+                reason = None
+
+                # True #1 issues
+                if issue_number == "1":
+                    reason = "#1 ISSUE"
+
+                # Variant keywords
+                if not reason:
+                    for kw, label in VARIANT_KEYWORDS:
+                        if kw in title_lower:
+                            reason = label
+                            break
+
+                # Collector keywords
+                if not reason:
+                    for kws, label in COLLECTOR_KEYWORDS_LIST:
+                        if any(kw in title_lower for kw in kws):
+                            reason = label
+                            break
+
+                if reason:
+                    seen.add(issue["id"])
+                    combined.append({
+                        "title": title,
+                        "cover_url": get_cover_url(issue),
+                        "publisher": get_publisher(issue),
+                        "reason": reason,
+                    })
+        except Exception:
+            continue
+
+    return combined[:limit]
