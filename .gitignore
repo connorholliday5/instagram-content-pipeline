@@ -1,32 +1,40 @@
-# Environment
-.env
-
-# Python
+﻿# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.Python
+venv/
+.venv/
 *.egg-info/
-dist/
-build/
-.eggs/
 
-# Output — keep folder structure, ignore generated files
-output/*.jpg
-output/*.png
-output/*.jpeg
-output/weekly_plans/*.txt
-output/weekly_plans/*.json
+# Node / Expo
+node_modules/
+.expo/
+.expo-shared/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Database
+# Secrets & local data
+.env
+.env.local
 *.db
+metron_cache.db
+watchtower.db
+
+# Generated outputs
+output/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# IDE
+# Editor
 .vscode/
 .idea/
 *.swp
+*.swo
+
+# Build artifacts
+dist/
+build/
