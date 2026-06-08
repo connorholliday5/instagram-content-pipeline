@@ -18,6 +18,7 @@ const COMMANDS = [
   { id: 'run',     label: 'Weekly Comics',   subtitle: 'New Comic Book Day carousel' },
   { id: 'movies',  label: 'Monthly Movies',  subtitle: 'Movies carousel' },
   { id: 'tv',      label: 'Monthly TV',      subtitle: 'TV carousel' },
+  { id: 'games',   label: 'Monthly Games',   subtitle: 'Video game carousel' },
   { id: 'review',  label: 'Book Review',     subtitle: 'Review creator' },
   { id: 'poll',    label: 'Daily Poll',      subtitle: 'Story poll' },
   { id: 'ideate',  label: 'Weekly Plan',     subtitle: 'Content ideation' },
@@ -491,11 +492,3 @@ const styles = StyleSheet.create({
   logLine: { color: '#c8c8c8', fontFamily: 'Menlo', fontSize: 12, lineHeight: 16 },
   errorBlock: { color: '#ff8a80', fontFamily: 'Menlo', fontSize: 11, lineHeight: 16 },
 });
-
-
-
-
-
-
-
-

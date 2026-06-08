@@ -19,8 +19,11 @@ GOLD     = (255, 215, 0)
 GREEN    = (0, 200, 100)
 RED      = (220, 30, 30)
 
-# Movie accent color — cinematic red/gold
-ACCENT   = (200, 30, 30)
+# Games accent color - violet
+ACCENT   = (150, 80, 255)
+
+# Game key art is landscape (16:9), unlike movie/TV posters
+ASPECT = 16 / 9
 
 
 def _font(name: str, size: int):
@@ -75,7 +78,6 @@ def _stars(canvas: Image.Image):
 def _base() -> Image.Image:
     canvas = Image.new("RGBA", SIZE, BG+(255,))
     _stars(canvas)
-    # Cinematic dark vignette
     ov = Image.new("RGBA", SIZE, (0,0,0,0))
     d = ImageDraw.Draw(ov)
     d.ellipse([(-200,-200),(W+200,600)], fill=(0,0,0,60))
@@ -147,28 +149,30 @@ def _place_poster(canvas: Image.Image, url: Optional[str],
     else:
         ph = Image.new("RGB", (iw, ih), (15, 10, 20))
         ph_draw = ImageDraw.Draw(ph)
-        pf = _font("bold", max(20, iw//10))
+        pf = _font("bold", max(20, iw//14))
         words = label.split()
         lines, line = [], ""
         for w in words:
             test = (line+" "+w).strip()
-            if ph_draw.textbbox((0,0),test,font=pf)[2] > iw-10:
+            if ph_draw.textbbox((0,0),test,font=pf)[2] > iw-20:
                 if line: lines.append(line)
                 line = w
             else:
                 line = test
         if line: lines.append(line)
-        lh = max(24, iw//10) + 4
+        lh = max(24, iw//14) + 6
         sy = (ih - len(lines)*lh) // 2
         for li, ln in enumerate(lines):
             ph_draw.text((iw//2, sy+li*lh), ln, font=pf,
-                         fill=(80,60,80), anchor="mm")
+                         fill=(110,90,140), anchor="mm")
         canvas.paste(ph, (ix, iy))
 
     if num:
-        bs = 44
+        bs = 46
         draw.rectangle([(x1+bw+3,y1+bw+3),(x1+bw+3+bs,y1+bw+3+bs)], fill=(0,0,0))
-        nf = _font("display", bs-8)
+        draw.rectangle([(x1+bw+3,y1+bw+3),(x1+bw+3+bs,y1+bw+3+bs)],
+                       outline=border_color[:3], width=2)
+        nf = _font("display", bs-10)
         draw.text((x1+bw+3+bs//2, y1+bw+3+bs//2), str(num),
                   font=nf, fill=WHITE, anchor="mm")
 
@@ -219,14 +223,14 @@ def _pill_overlay(canvas: Image.Image, box: tuple, text: str,
     rf = _font("bold", subfont_size)
     bbox = draw.textbbox((0,0), text, font=rf)
     tw = bbox[2]-bbox[0]
-    pill_h = subfont_size + 10
-    pill_y = y2 - pill_h - 14
-    px1 = cx - tw//2 - 14
-    px2 = cx + tw//2 + 14
+    pill_h = subfont_size + 12
+    pill_y = y2 - pill_h - 16
+    px1 = cx - tw//2 - 16
+    px2 = cx + tw//2 + 16
 
     ov = Image.new("RGBA", SIZE, (0,0,0,0))
     od = ImageDraw.Draw(ov)
-    od.rectangle([(x1+4, pill_y-8),(x2-4, y2-4)], fill=(0,0,0,185))
+    od.rectangle([(x1+4, pill_y-10),(x2-4, y2-4)], fill=(0,0,0,190))
     canvas.alpha_composite(ov)
 
     ov2 = Image.new("RGBA", SIZE, (0,0,0,0))
@@ -238,6 +242,64 @@ def _pill_overlay(canvas: Image.Image, box: tuple, text: str,
     draw = ImageDraw.Draw(canvas)
     draw.text((cx, pill_y+pill_h//2), text,
               font=rf, fill=color+(240,), anchor="mm")
+
+
+def _grid_layout(n: int, cols: int, pad: int, top: int, bottom: int):
+    """
+    Landscape (16:9) grid that fits within the body area and centers itself.
+    Returns (rows, cw, ch, start_x, start_y).
+    """
+    rows = math.ceil(n / cols)
+    avail_w = W - pad * (cols + 1)
+    avail_h = bottom - top
+
+    cw = avail_w // cols
+    ch = int(cw / ASPECT)
+    total_h = rows * ch + (rows - 1) * pad
+
+    if total_h > avail_h:
+        ch = (avail_h - (rows - 1) * pad) // rows
+        cw = int(ch * ASPECT)
+
+    grid_w = cols * cw + (cols - 1) * pad
+    start_x = (W - grid_w) // 2
+    total_h = rows * ch + (rows - 1) * pad
+    start_y = top + (avail_h - total_h) // 2
+    return rows, cw, ch, start_x, start_y
+
+
+def _cols_for(n: int) -> int:
+    """Pick a column count that keeps landscape thumbnails readable."""
+    if n <= 1:
+        return 1
+    if n <= 2:
+        return 1   # stacked, large
+    if n <= 8:
+        return 2
+    return 2       # 9-10 -> 2 cols x 5 rows
+
+
+def _place_grid(canvas, items, pad, top, bottom, cols,
+                get_title, get_poster_url, numbered=True,
+                border=ACCENT, border_colors=None, pill_fn=None):
+    n = len(items)
+    rows, cw, ch, start_x, start_y = _grid_layout(n, cols, pad, top, bottom)
+    for idx, item in enumerate(items):
+        row = idx // cols
+        col = idx % cols
+        items_in_row = min(cols, n - row * cols)
+        row_w = items_in_row * cw + (items_in_row - 1) * pad
+        row_start = (W - row_w) // 2
+        x1 = row_start + col * (cw + pad)
+        y1 = start_y + row * (ch + pad)
+        bc = border_colors[idx] if border_colors and idx < len(border_colors) else border
+        num = idx + 1 if numbered else 0
+        _place_poster(canvas, get_poster_url(item),
+                      (x1, y1, x1 + cw, y1 + ch), bc, num, get_title(item))
+        if pill_fn:
+            text = pill_fn(item)
+            if text:
+                _pill_overlay(canvas, (x1, y1, x1 + cw, y1 + ch), text, bc, subfont_size=30)
 
 
 def _draw_station(canvas: Image.Image, top_y: int, scale: float = 0.88):
@@ -331,10 +393,8 @@ def _draw_station(canvas: Image.Image, top_y: int, scale: float = 0.88):
     draw.ellipse([(cx-s(24),top_y+s(448)),(cx+s(24),top_y+s(466))],fill=C3)
 
 
-# ─────────────────────────────────────────────────────────
-# SLIDE 1 — COVER
-# ─────────────────────────────────────────────────────────
-def build_movies_cover(month_date: date) -> Path:
+# SLIDE 1 - COVER
+def build_games_cover(month_date: date) -> Path:
     canvas = _base()
     station_top = 35
     _draw_station(canvas, station_top, scale=0.88)
@@ -357,7 +417,7 @@ def build_movies_cover(month_date: date) -> Path:
     total_h = line_h*2 + 20 + 60 + 14 + 40
     block_top = text_mid - total_h//2
 
-    draw.text((W//2, block_top+line_h//2), "MOVIES",
+    draw.text((W//2, block_top+line_h//2), "GAMES",
               font=hf, fill=WHITE, anchor="mm")
     draw.text((W//2, block_top+line_h+16+line_h//2), "THIS MONTH",
               font=hf, fill=WHITE, anchor="mm")
@@ -375,190 +435,107 @@ def build_movies_cover(month_date: date) -> Path:
     draw.text((W-36, H-16), "@the.watch_tower",
               font=hf2, fill=GRAY_DIM+(80,), anchor="rm")
 
-    return _save(canvas, "movie_01_cover")
+    return _save(canvas, "games_01_cover")
 
 
-# ─────────────────────────────────────────────────────────
-# SLIDE 2 — TOP 10 ANTICIPATED
-# ─────────────────────────────────────────────────────────
-def build_movies_top10(movies: list, month_date: date,
-                       get_title, get_poster_url) -> Path:
+# SLIDE 2 - TOP 10 RELEASES
+def build_games_top10(games: list, month_date: date,
+                      get_title, get_poster_url) -> Path:
     canvas = _base()
-    header_bottom = _header(canvas, "TOP 10 MOST ANTICIPATED")
+    header_bottom = _header(canvas, "TOP 10 RELEASES")
 
     pad = 10
     gt = header_bottom + 14
     gb = H - 78
 
-    # 4 cols x 3 rows = 12 cells, use 10 — gives portrait ratio ~0.74
-    cols, rows = 4, 3
+    count = min(len(games), 10)
+    if count == 0:
+        _footer(canvas, month_date.strftime("%B %Y").upper())
+        return _save(canvas, "games_02_top10")
+
+    cols = 4 if count >= 5 else max(count, 1)
+    rows = (count + cols - 1) // cols
     cw = (W - pad*(cols+1)) // cols
     ch = (gb - gt - pad*(rows-1)) // rows
 
-    for idx in range(10):
-        col = idx % cols
+    for idx in range(count):
         row = idx // cols
-        # Last row has only 2 items — center them
-        if row == 2:
-            items_in_last_row = 10 - (cols * (rows-1))  # = 2
-            total_w = items_in_last_row * cw + (items_in_last_row-1) * pad
-            start_x = (W - total_w) // 2
-            col_in_last = idx - cols*(rows-1)
-            x1 = start_x + col_in_last*(cw+pad)
-        else:
-            x1 = pad + col*(cw+pad)
+        items_in_row = min(cols, count - row*cols)
+        total_w = items_in_row*cw + (items_in_row-1)*pad
+        start_x = (W - total_w) // 2
+        col_in_row = idx - row*cols
+        x1 = start_x + col_in_row*(cw+pad)
         y1 = gt + row*(ch+pad)
-        if idx < len(movies):
-            movie = movies[idx]
-            _place_poster(canvas, get_poster_url(movie),
-                         (x1, y1, x1+cw, y1+ch),
-                         ACCENT, idx+1, get_title(movie))
-            _draw_title_caption(canvas, (x1, y1, x1+cw, y1+ch), get_title(movie))
+        game = games[idx]
+        _place_poster(canvas, get_poster_url(game),
+                     (x1, y1, x1+cw, y1+ch),
+                     ACCENT, idx+1, get_title(game))
+        _draw_title_caption(canvas, (x1, y1, x1+cw, y1+ch), get_title(game))
 
     _footer(canvas, month_date.strftime("%B %Y").upper())
-    return _save(canvas, "movie_02_top10")
+    return _save(canvas, "games_02_top10")
 
 
-# ─────────────────────────────────────────────────────────
-# SLIDE 3 — YOUR PICKS
-# ─────────────────────────────────────────────────────────
-def build_movies_picks(picks: list, month_date: date,
-                       get_title, get_poster_url) -> Path:
+# SLIDE 3 - YOUR PICKS
+def build_games_picks(picks: list, month_date: date,
+                      get_title, get_poster_url) -> Path:
     canvas = _base()
     header_bottom = _header(canvas, "WATCHTOWER'S PICKS OF THE MONTH")
-    draw = ImageDraw.Draw(canvas)
 
-    pad = 10
-    gt = header_bottom + 14
-    gb = H - 78
+    pad = 14
+    top = header_bottom + 16
+    bottom = H - 78
     n = len(picks)
 
     if n == 0:
+        draw = ImageDraw.Draw(canvas)
         mf = _font("bold", 72)
         draw.text((W//2, H//2), "NO PICKS THIS MONTH",
                   font=mf, fill=GRAY_DIM+(180,), anchor="mm")
-    elif n == 1:
-        # Single — centered portrait
-        cw = int(W * 0.52)
-        x1 = (W - cw) // 2
-        _place_poster(canvas, get_poster_url(picks[0]),
-                     (x1, gt, x1+cw, gb), ACCENT, 1, get_title(picks[0]))
-    elif n == 2:
-        # Two side by side portrait
-        cw = (W - pad*3) // 2
-        ch = gb - gt
-        for idx, movie in enumerate(picks):
-            x1 = pad + idx*(cw+pad)
-            _place_poster(canvas, get_poster_url(movie),
-                         (x1, gt, x1+cw, gt+ch),
-                         ACCENT, idx+1, get_title(movie))
-    elif n <= 4:
-        # 2 cols, up to 2 rows — portrait cells
-        cols = 2
-        rows = (n+1)//2
-        cw = (W - pad*(cols+1)) // cols
-        ch = (gb - gt - pad*(rows-1)) // rows
-        for idx, movie in enumerate(picks):
-            col = idx % cols
-            row = idx // cols
-            x1 = pad + col*(cw+pad)
-            y1 = gt + row*(ch+pad)
-            if n % 2 == 1 and idx == n-1:
-                x1 = (W - cw) // 2
-            _place_poster(canvas, get_poster_url(movie),
-                         (x1, y1, x1+cw, y1+ch),
-                         ACCENT, idx+1, get_title(movie))
-    elif n <= 6:
-        # 3 cols, up to 2 rows
-        cols = 3
-        rows = (n+cols-1)//cols
-        cw = (W - pad*(cols+1)) // cols
-        ch = (gb - gt - pad*(rows-1)) // rows
-        for idx, movie in enumerate(picks):
-            col = idx % cols
-            row = idx // cols
-            items_in_row = min(cols, n - row*cols)
-            if items_in_row < cols:
-                total_w = items_in_row*cw + (items_in_row-1)*pad
-                x1 = (W - total_w)//2 + (idx % cols)*(cw+pad)
-            else:
-                x1 = pad + col*(cw+pad)
-            y1 = gt + row*(ch+pad)
-            _place_poster(canvas, get_poster_url(movie),
-                         (x1, y1, x1+cw, y1+ch),
-                         ACCENT, idx+1, get_title(movie))
     else:
-        # 4 cols x 3 rows max — same as top 10 grid
-        cols = 4
-        rows = (n+cols-1)//cols
-        cw = (W - pad*(cols+1)) // cols
-        ch = (gb - gt - pad*(rows-1)) // rows
-        for idx, movie in enumerate(picks):
-            col = idx % cols
-            row = idx // cols
-            items_in_row = min(cols, n - row*cols)
-            if items_in_row < cols:
-                total_w = items_in_row*cw + (items_in_row-1)*pad
-                x1 = (W - total_w)//2 + (idx % items_in_row)*(cw+pad)
-            else:
-                x1 = pad + col*(cw+pad)
-            y1 = gt + row*(ch+pad)
-            _place_poster(canvas, get_poster_url(movie),
-                         (x1, y1, x1+cw, y1+ch),
-                         ACCENT, idx+1, get_title(movie))
+        cols = _cols_for(n)
+        _place_grid(canvas, picks, pad, top, bottom, cols,
+                    get_title, get_poster_url, numbered=True, border=ACCENT)
 
     _footer(canvas, month_date.strftime("%B %Y").upper())
-    return _save(canvas, "movie_03_picks")
+    return _save(canvas, "games_03_picks")
 
 
-# ─────────────────────────────────────────────────────────
-# SLIDE 4 — HIGHEST GROSSING LAST MONTH
-# ─────────────────────────────────────────────────────────
-def build_movies_grossing(movies: list, month_date: date,
-                          get_title, get_poster_url, get_revenue,
-                          format_revenue) -> Path:
+# SLIDE 4 - MOST PLAYED
+def build_games_most_played(games: list, month_date: date,
+                            get_title, get_poster_url,
+                            get_added, format_added) -> Path:
     canvas = _base()
-
-    # Get last month name for header
-    from calendar import month_name
-    first_this = month_date.replace(day=1)
-    from datetime import timedelta
-    last_prev = first_this - timedelta(days=1)
-    prev_month_name = last_prev.strftime("%B %Y").upper()
-
-    header_bottom = _header(canvas, "HIGHEST GROSSING LAST MONTH")
+    header_bottom = _header(canvas, "MOST PLAYED")
     draw = ImageDraw.Draw(canvas)
 
     sf = _font("small", 30)
-    draw.text((W//2, header_bottom+22), prev_month_name,
+    draw.text((W//2, header_bottom+22), "PLAYING RIGHT NOW ON STEAM",
               font=sf, fill=GOLD+(160,), anchor="mm")
 
     pad = 20
     gt = header_bottom + 52
     gb = H - 78
-    movies = movies[:3]
-    n = max(len(movies), 1)
+    games = games[:3]
+    n = max(len(games), 1)
     cw = (W - pad*(n+1)) // n
     ch = gb - gt
 
-    for idx, movie in enumerate(movies):
+    for idx, game in enumerate(games):
         x1 = pad + idx*(cw+pad)
         y1 = gt
 
-        # Rank badge color
-        rank_colors = [GOLD, (192,192,192), (205,127,50)]  # gold, silver, bronze
+        rank_colors = [GOLD, (192,192,192), (205,127,50)]
         border_color = rank_colors[idx] if idx < len(rank_colors) else GRAY_DIM
 
-        _place_poster(canvas, get_poster_url(movie),
+        _place_poster(canvas, get_poster_url(game),
                      (x1, y1, x1+cw, y1+ch),
-                     border_color, idx+1, get_title(movie))
+                     border_color, idx+1, get_title(game))
 
-        # Revenue pill overlay
-        rev = get_revenue(movie)
-        if rev > 0:
-            rev_str = format_revenue(rev)
+        n_added = get_added(game)
+        if n_added:
             _pill_overlay(canvas, (x1, y1, x1+cw, y1+ch),
-                         rev_str, border_color, subfont_size=30)
+                         f"{format_added(n_added)} players", border_color, subfont_size=28)
 
     _footer(canvas, month_date.strftime("%B %Y").upper())
-    return _save(canvas, "movie_04_grossing")
+    return _save(canvas, "games_04_most_played")

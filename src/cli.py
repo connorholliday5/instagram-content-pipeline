@@ -30,7 +30,7 @@ def _cleanup_output(days: int = 7):
             except Exception:
                 pass
     if deleted:
-        console.log(f"[dim]ðŸ—‘ Cleaned {deleted} output file(s) older than {days} days[/dim]")
+        console.log(f"[dim] Cleaned {deleted} output file(s) older than {days} days[/dim]")
 
 
 def open_image(path: str):
@@ -47,8 +47,9 @@ def run_weekly_carousel(dry_run: bool = True):
         get_publisher,
         get_title,
         get_store_date,
+        _upcoming_wednesday,
     )
-    from src.generate.carousel import (
+    from src.generate.comics_carousel import (
         build_cover_slide,
         build_top10_slide,
         build_picks_slide,
@@ -60,10 +61,13 @@ def run_weekly_carousel(dry_run: bool = True):
 
     init_db()
     today = date.today()
+    # Posted ahead of time (e.g. Monday) about the upcoming New Comic Book Day.
+    # All on-slide dates and the caption read as that Wednesday, not the run day.
+    street_date = _upcoming_wednesday(today)
     mode = "[DRY RUN]" if dry_run else "[LIVE]"
     console.rule(f"[bold red]TheWatchtower_ Weekly Carousel {mode}[/bold red]")
 
-    # â”€â”€ Fetch releases â”€â”€
+    #  Fetch releases 
     console.log("Fetching top 10 new releases this week...")
     top_issues = fetch_top_weekly_issues(limit=10)
     total = len(top_issues)
@@ -82,17 +86,17 @@ def run_weekly_carousel(dry_run: bool = True):
         table.add_row(str(i+1), get_title(issue), get_publisher(issue), get_store_date(issue))
     console.print(table)
 
-    # â”€â”€ Combined variants + collector items â”€â”€
+    #  Combined variants + collector items 
     console.log("\nScanning for collector items & rare variants...")
     collector_items = fetch_variants_and_collectors(limit=4)
     if collector_items:
-        console.print(f"[bold gold1]ðŸ”‘ {len(collector_items)} item(s) found:[/bold gold1]")
+        console.print(f"[bold gold1] {len(collector_items)} item(s) found:[/bold gold1]")
         for c in collector_items:
-            console.print(f"  [gold1]â€¢[/gold1] {c['title']} â€” [bold]{c['reason']}[/bold]")
+            console.print(f"  [gold1][/gold1] {c['title']}  [bold]{c['reason']}[/bold]")
     else:
         console.print("[dim]No collector items detected.[/dim]")
 
-    # â”€â”€ Picks â”€â”€
+    #  Picks 
     console.print(f"\n[bold yellow]Your picks this week?[/bold yellow]")
     console.print(f"[dim]Enter numbers from the list above (e.g. 1, 3, 7) or leave blank[/dim]")
     picks_input = Prompt.ask("Picks").strip()
@@ -107,7 +111,7 @@ def run_weekly_carousel(dry_run: bool = True):
                     pick_issues.append(top_issues[idx])
                     pick_titles.append(get_title(top_issues[idx]))
                 else:
-                    console.print(f"[yellow]âš  {part} out of range[/yellow]")
+                    console.print(f"[yellow]  {part} out of range[/yellow]")
             except ValueError:
                 issue = search_issue(part)
                 if issue:
@@ -118,30 +122,30 @@ def run_weekly_carousel(dry_run: bool = True):
                                         "publisher": {}, "series": {}})
                     pick_titles.append(part)
 
-    # â”€â”€ Build slides â”€â”€
+    #  Build slides 
     console.rule("[bold]Building slides...[/bold]")
     slides = []
 
     console.log("Slide 1: Cover page...")
-    slides.append(str(build_cover_slide(today)))
-    console.log(f"[green]âœ“[/green] {slides[-1]}")
+    slides.append(str(build_cover_slide(street_date)))
+    console.log(f"[green][/green] {slides[-1]}")
 
     console.log("Slide 2: Top 10...")
     slides.append(str(build_top10_slide(
-        top_issues, today, get_title, get_cover_url, get_publisher)))
-    console.log(f"[green]âœ“[/green] {slides[-1]}")
+        top_issues, street_date, get_title, get_cover_url, get_publisher)))
+    console.log(f"[green][/green] {slides[-1]}")
 
     console.log("Slide 3: Picks...")
     slides.append(str(build_picks_slide(
-        pick_issues, today, get_title, get_cover_url, get_publisher)))
-    console.log(f"[green]âœ“[/green] {slides[-1]}")
+        pick_issues, street_date, get_title, get_cover_url, get_publisher)))
+    console.log(f"[green][/green] {slides[-1]}")
 
     if collector_items:
         console.log("Slide 4: Collector's Corner...")
-        slides.append(str(build_collectors_slide(collector_items, today)))
-        console.log(f"[green]âœ“[/green] {slides[-1]}")
+        slides.append(str(build_collectors_slide(collector_items, street_date)))
+        console.log(f"[green][/green] {slides[-1]}")
 
-    # â”€â”€ Review â”€â”€
+    #  Review 
     console.rule("[bold yellow]Review Slides[/bold yellow]")
     console.print(f"[dim]{len(slides)} slides. Opening each for review...[/dim]\n")
     for i, slide_path in enumerate(slides):
@@ -149,7 +153,7 @@ def run_weekly_carousel(dry_run: bool = True):
         open_image(slide_path)
         input("  Press Enter for next slide...")
 
-    # â”€â”€ Caption â€” short, no hallucination â”€â”€
+    #  Caption  short, no hallucination 
     console.rule("[bold]Caption[/bold]")
     pick_str = ", ".join(pick_titles) if pick_titles else "this week's top releases"
     collector_str = ", ".join([f"{c['title']} ({c['reason']})"
@@ -160,18 +164,17 @@ def run_weekly_carousel(dry_run: bool = True):
         category="comics",
         description=(
             f"Keep it under 3 sentences. No made-up creative team details. "
-            f"New comic book day â€” {total} releases this week. "
+            f"This is a preview posted ahead of time - {total} new comics drop "
+            f"this Wednesday. Frame it as a heads up so readers can plan their pull list. "
             f"Connor's picks: {pick_str}. "
             f"{'Collector highlights: ' + collector_str if collector_str else ''} "
-            f"End with a short question asking what's on their pull list."
+            f"End with a short question asking what's on their pull list this week."
         ),
-        release_date=today.strftime("%B %d, %Y"),
+        release_date=street_date.strftime("%B %d, %Y"),
     )
 
     hashtags = (
-        "#NewComicBookDay #NCBD #TheWatchtower #DCComics #MarvelComics "
-        "#IndieComics #ComicBookCommunity #WeeklyComics #ComicBooks "
-        "#NewRelease #ComicBookDay #PullList #ComicBookNerd #LCS #LocalComicShop"
+        "#Comics #Marvel #DCComics #ComicBooks #NCBD"
     )
     full_caption = f"{raw_caption}\n\n{hashtags}"
     console.print(Panel(full_caption, title="[bold]Caption Preview[/bold]", border_style="cyan"))
@@ -180,10 +183,9 @@ def run_weekly_carousel(dry_run: bool = True):
     if action == "edit":
         full_caption = Prompt.ask("Enter new caption")
 
-    # â”€â”€ Post â”€â”€
-    today_str = today.strftime("%A, %B %d")
+    #  Post 
     confirm = Prompt.ask(
-        f"\n[bold red]Post {len(slides)} slides? (Scheduled: Wednesday)[/bold red]",
+        f"\n[bold red]Post {len(slides)} slides? (Comics drop {street_date.strftime('%A, %B %d')})[/bold red]",
         choices=["yes", "no"], default="no"
     )
 
@@ -192,21 +194,11 @@ def run_weekly_carousel(dry_run: bool = True):
         console.rule("[bold red]Done[/bold red]")
         return
 
-    if today.weekday() != 2:
-        override = Prompt.ask(
-            f"[yellow]Today is {today_str}, not Wednesday. Post anyway?[/yellow]",
-            choices=["yes", "no"], default="no"
-        )
-        if override != "yes":
-            console.print("[yellow]Cancelled.[/yellow]")
-            console.rule("[bold red]Done[/bold red]")
-            return
-
     result = post_carousel(slides, full_caption, dry_run=dry_run)
     if dry_run:
-        console.print("[yellow]DRY RUN â€” nothing posted.[/yellow]")
+        console.print("[yellow]DRY RUN  nothing posted.[/yellow]")
     else:
-        console.log(f"[bold green]âœ“ Posted! Media ID: {result.get('media_id')}[/bold green]")
+        console.log(f"[bold green] Posted! Media ID: {result.get('media_id')}[/bold green]")
 
     console.rule("[bold red]Done[/bold red]")
 
@@ -299,9 +291,9 @@ def movies(live):
     console.log("\nFetching highest grossing movies from last month...")
     grossing = fetch_top_grossing_last_month(limit=3)
     if grossing:
-        console.print(f"[bold gold1]ðŸ’° Top {len(grossing)} grossing last month:[/bold gold1]")
+        console.print(f"[bold gold1] Top {len(grossing)} grossing last month:[/bold gold1]")
         for m in grossing:
-            console.print(f"  [gold1]â€¢[/gold1] {get_movie_title(m)} â€” {format_revenue(get_movie_revenue(m))}")
+            console.print(f"  [gold1][/gold1] {get_movie_title(m)}  {format_revenue(get_movie_revenue(m))}")
 
     console.print(f"\n[bold yellow]Your picks this month?[/bold yellow]")
     console.print(f"[dim]Enter numbers from the list (e.g. 1, 3, 5) or leave blank[/dim]")
@@ -318,24 +310,24 @@ def movies(live):
                     pick_movies.append(top_movies[idx])
                     pick_titles.append(get_movie_title(top_movies[idx]))
                 else:
-                    console.print(f"[yellow]âš  {part} out of range[/yellow]")
+                    console.print(f"[yellow]  {part} out of range[/yellow]")
             except ValueError:
-                console.print(f"[yellow]âš  Could not parse {part}[/yellow]")
+                console.print(f"[yellow]  Could not parse {part}[/yellow]")
 
     console.rule("[bold]Building slides...[/bold]")
     slides = []
 
     console.log("Slide 1: Cover...")
     slides.append(str(build_movies_cover(today)))
-    console.log(f"[green]âœ“[/green] {slides[-1]}")
+    console.log(f"[green][/green] {slides[-1]}")
 
     console.log("Slide 2: Top 10 anticipated...")
     slides.append(str(build_movies_top10(top_movies, today, get_movie_title, get_movie_poster_url)))
-    console.log(f"[green]âœ“[/green] {slides[-1]}")
+    console.log(f"[green][/green] {slides[-1]}")
 
     console.log("Slide 3: Picks...")
     slides.append(str(build_movies_picks(pick_movies, today, get_movie_title, get_movie_poster_url)))
-    console.log(f"[green]âœ“[/green] {slides[-1]}")
+    console.log(f"[green][/green] {slides[-1]}")
 
     if grossing:
         console.log("Slide 4: Highest grossing last month...")
@@ -343,7 +335,7 @@ def movies(live):
             grossing, today, get_movie_title, get_movie_poster_url,
             get_movie_revenue, format_revenue
         )))
-        console.log(f"[green]âœ“[/green] {slides[-1]}")
+        console.log(f"[green][/green] {slides[-1]}")
 
     console.rule("[bold yellow]Review Slides[/bold yellow]")
     for i, slide_path in enumerate(slides):
@@ -356,7 +348,7 @@ def movies(live):
     month_str = today.strftime("%B %Y")
 
     raw_caption = generate_caption(
-        title=f"Movies This Month â€” {month_str}",
+        title=f"Movies This Month  {month_str}",
         category="film",
         description=(
             f"Top 10 most anticipated movies releasing in {month_str}. "
@@ -368,9 +360,7 @@ def movies(live):
     )
 
     hashtags = (
-        "#MovieMonth #NewMovies #TheWatchtower #FilmTwitter #MovieLovers "
-        "#NowPlaying #ComingSoon #FilmCommunity #MovieNight #Cinema "
-        "#MovieRecommendations #WatchList #FilmFan #Movies2026"
+        "#Movies #Film #Cinema #FilmTwitter #MovieReview"
     )
     full_caption = f"{raw_caption}\n\n{hashtags}"
     console.print(Panel(full_caption, title="[bold]Caption Preview[/bold]", border_style="cyan"))
@@ -379,7 +369,7 @@ def movies(live):
     if action == "edit":
         full_caption = Prompt.ask("Enter new caption")
 
-    console.print(f"\n[bold green]âœ“ {len(slides)} slides ready.[/bold green]")
+    console.print(f"\n[bold green] {len(slides)} slides ready.[/bold green]")
     console.print("[dim]Post manually to Instagram as a carousel.[/dim]")
     console.rule("[bold red]Done[/bold red]")
 
@@ -436,9 +426,9 @@ def tv(live):
     console.log("\nFetching most popular shows from last month...")
     popular = fetch_popular_shows_last_month(limit=3)
     if popular:
-        console.print(f"[bold cyan]ðŸ“º Top {len(popular)} most popular last month:[/bold cyan]")
+        console.print(f"[bold cyan] Top {len(popular)} most popular last month:[/bold cyan]")
         for s in popular:
-            console.print(f"  [cyan]â€¢[/cyan] {get_show_title(s)} ({get_show_network(s)})")
+            console.print(f"  [cyan][/cyan] {get_show_title(s)} ({get_show_network(s)})")
 
     console.print(f"\n[bold yellow]Your picks this month?[/bold yellow]")
     console.print(f"[dim]Enter numbers from the list (e.g. 1, 3, 5) or leave blank[/dim]")
@@ -455,24 +445,24 @@ def tv(live):
                     pick_shows.append(top_shows[idx])
                     pick_titles.append(get_show_title(top_shows[idx]))
                 else:
-                    console.print(f"[yellow]âš  {part} out of range[/yellow]")
+                    console.print(f"[yellow]  {part} out of range[/yellow]")
             except ValueError:
-                console.print(f"[yellow]âš  Could not parse {part}[/yellow]")
+                console.print(f"[yellow]  Could not parse {part}[/yellow]")
 
     console.rule("[bold]Building slides...[/bold]")
     slides = []
 
     console.log("Slide 1: Cover...")
     slides.append(str(build_tv_cover(today)))
-    console.log(f"[green]âœ“[/green] {slides[-1]}")
+    console.log(f"[green][/green] {slides[-1]}")
 
     console.log("Slide 2: Top 10 shows...")
     slides.append(str(build_tv_top10(top_shows, today, get_show_title, get_show_poster_url)))
-    console.log(f"[green]âœ“[/green] {slides[-1]}")
+    console.log(f"[green][/green] {slides[-1]}")
 
     console.log("Slide 3: Picks...")
     slides.append(str(build_tv_picks(pick_shows, today, get_show_title, get_show_poster_url)))
-    console.log(f"[green]âœ“[/green] {slides[-1]}")
+    console.log(f"[green][/green] {slides[-1]}")
 
     if popular:
         console.log("Slide 4: Most popular last month...")
@@ -480,7 +470,7 @@ def tv(live):
             popular, today, get_show_title, get_show_poster_url, get_show_network,
             get_show_vote_average, get_show_vote_count, format_vote_count
         )))
-        console.log(f"[green]âœ“[/green] {slides[-1]}")
+        console.log(f"[green][/green] {slides[-1]}")
 
     console.rule("[bold yellow]Review Slides[/bold yellow]")
     for i, slide_path in enumerate(slides):
@@ -493,7 +483,7 @@ def tv(live):
     month_str = today.strftime("%B %Y")
 
     raw_caption = generate_caption(
-        title=f"TV Shows This Month â€” {month_str}",
+        title=f"TV Shows This Month  {month_str}",
         category="tv",
         description=(
             f"Top 10 most anticipated TV shows premiering in {month_str}. "
@@ -505,9 +495,7 @@ def tv(live):
     )
 
     hashtags = (
-        "#TVShows #NewOnTV #TheWatchtower #Television #StreamingNow "
-        "#WhatToWatch #TVRecommendations #BingWorthy #NewSeries "
-        "#StreamingTV #MustWatch #TVCommunity #NewEpisodes #TVTime"
+        "#TV #Netflix #Streaming #TVShow #BingeWatch"
     )
     full_caption = f"{raw_caption}\n\n{hashtags}"
     console.print(Panel(full_caption, title="[bold]Caption Preview[/bold]", border_style="cyan"))
@@ -516,7 +504,145 @@ def tv(live):
     if action == "edit":
         full_caption = Prompt.ask("Enter new caption")
 
-    console.print(f"\n[bold green]âœ“ {len(slides)} slides ready.[/bold green]")
+    console.print(f"\n[bold green] {len(slides)} slides ready.[/bold green]")
+    console.print("[dim]Post manually to Instagram as a carousel.[/dim]")
+    console.rule("[bold red]Done[/bold red]")
+
+
+
+@cli.command()
+@click.option("--live", is_flag=True, default=False)
+def games(live):
+    """Run the monthly video game carousel pipeline."""
+    from src.ingest.rawg import (
+        fetch_anticipated_games,
+        get_game_title,
+        get_game_poster_url,
+        get_game_release_date,
+        get_game_platforms,
+    )
+    from src.ingest.steam import (
+        fetch_most_played,
+        get_steam_title,
+        get_steam_poster_url,
+        get_steam_players,
+        format_players,
+    )
+    from src.generate.games_carousel import (
+        build_games_cover,
+        build_games_top10,
+        build_games_picks,
+        build_games_most_played,
+    )
+    from src.caption.groq_caption import generate_caption
+    from src.db.models import init_db
+
+    init_db()
+    today = date.today()
+    mode = "[DRY RUN]" if not live else "[LIVE]"
+    console.rule(f"[bold red]TheWatchtower_ Monthly Games {mode}[/bold red]")
+
+    console.log("Fetching top 10 game releases this month...")
+    top_games = fetch_anticipated_games(limit=10)
+
+    if not top_games:
+        console.print("[red]No games found for this month.[/red]")
+        return
+
+    console.print(f"\n[bold green]{len(top_games)} games found:[/bold green]\n")
+    from rich.table import Table as RTable
+    table = RTable(show_header=True, header_style="bold red")
+    table.add_column("#", width=4)
+    table.add_column("Title")
+    table.add_column("Release Date")
+    table.add_column("Platforms")
+    for i, game in enumerate(top_games):
+        table.add_row(str(i+1), get_game_title(game),
+                      get_game_release_date(game), get_game_platforms(game))
+    console.print(table)
+
+    console.log("\nFetching most played games on Steam...")
+    most_played = fetch_most_played(limit=3)
+    if most_played:
+        console.print(f"[bold gold1]Top {len(most_played)} most played (Steam live):[/bold gold1]")
+        for g in most_played:
+            console.print(f"  [gold1]*[/gold1] {get_steam_title(g)} - {format_players(get_steam_players(g))} players")
+
+    console.print(f"\n[bold yellow]Your picks this month?[/bold yellow]")
+    console.print(f"[dim]Enter numbers from the list (e.g. 1, 3, 5) or leave blank[/dim]")
+    picks_input = Prompt.ask("Picks").strip()
+
+    pick_games = []
+    pick_titles = []
+    if picks_input:
+        for part in picks_input.split(","):
+            part = part.strip()
+            try:
+                idx = int(part) - 1
+                if 0 <= idx < len(top_games):
+                    pick_games.append(top_games[idx])
+                    pick_titles.append(get_game_title(top_games[idx]))
+                else:
+                    console.print(f"[yellow]{part} out of range[/yellow]")
+            except ValueError:
+                console.print(f"[yellow]Could not parse {part}[/yellow]")
+
+    console.rule("[bold]Building slides...[/bold]")
+    slides = []
+
+    console.log("Slide 1: Cover...")
+    slides.append(str(build_games_cover(today)))
+    console.log(f"[green]ok[/green] {slides[-1]}")
+
+    console.log("Slide 2: Top 10 releases...")
+    slides.append(str(build_games_top10(top_games, today, get_game_title, get_game_poster_url)))
+    console.log(f"[green]ok[/green] {slides[-1]}")
+
+    console.log("Slide 3: Picks...")
+    slides.append(str(build_games_picks(pick_games, today, get_game_title, get_game_poster_url)))
+    console.log(f"[green]ok[/green] {slides[-1]}")
+
+    if most_played:
+        console.log("Slide 4: Most played (Steam live)...")
+        slides.append(str(build_games_most_played(
+            most_played, today, get_steam_title, get_steam_poster_url,
+            get_steam_players, format_players
+        )))
+        console.log(f"[green]ok[/green] {slides[-1]}")
+
+    console.rule("[bold yellow]Review Slides[/bold yellow]")
+    for i, slide_path in enumerate(slides):
+        console.print(f"[bold cyan]Slide {i+1}/{len(slides)}:[/bold cyan] {slide_path}")
+        open_image(slide_path)
+        input("  Press Enter for next slide...")
+
+    console.rule("[bold]Caption[/bold]")
+    pick_str = ", ".join(pick_titles) if pick_titles else "this month's top releases"
+    month_str = today.strftime("%B %Y")
+
+    raw_caption = generate_caption(
+        title=f"Games This Month - {month_str}",
+        category="games",
+        description=(
+            f"Top 10 video game releases in {month_str} across PC, PlayStation, Xbox, and Switch. "
+            f"Picks: {pick_str}. "
+            f"No plot descriptions. No made-up details. "
+            f"End with a question asking what they're playing this month."
+        ),
+        release_date=month_str,
+    )
+
+    hashtags = (
+        "#Gaming #VideoGames #Gamer #Games #GamingCommunity"
+    )
+    full_caption = f"{raw_caption}\n\n{hashtags}"
+    console.print(Panel(full_caption, title="[bold]Caption Preview[/bold]", border_style="cyan"))
+
+    action = Prompt.ask("Caption", choices=["approve", "edit"], default="approve")
+    if action == "edit":
+        full_caption = Prompt.ask("Enter new caption")
+
+    console.print(f"\n[bold green]ok {len(slides)} slides ready.[/bold green]")
     console.print("[dim]Post manually to Instagram as a carousel.[/dim]")
     console.rule("[bold red]Done[/bold red]")
 
@@ -529,7 +655,7 @@ def poll():
     from rich.table import Table as RTable
 
     today = date.today()
-    console.rule("[bold red]TheWatchtower_ â€” Daily Story Poll[/bold red]")
+    console.rule("[bold red]TheWatchtower_  Daily Story Poll[/bold red]")
 
     while True:
         console.log("Groq generating poll question...")
@@ -555,12 +681,12 @@ def poll():
 
         console.log("Building story slide...")
         slide_path = build_poll_story(poll_data, today)
-        console.log(f"[green]âœ“[/green] {slide_path}")
+        console.log(f"[green][/green] {slide_path}")
 
         import subprocess
         subprocess.Popen(["explorer", str(slide_path).replace("/", "\\")])
 
-        console.print(f"\n[bold green]âœ“ Poll ready: {slide_path}[/bold green]")
+        console.print(f"\n[bold green] Poll ready: {slide_path}[/bold green]")
         console.print("[dim]Post to Instagram Story manually.[/dim]")
         console.rule("[bold red]Done[/bold red]")
         break
@@ -575,9 +701,9 @@ def ideate():
 
 if __name__ == "__main__":
     cli()
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# Stage runner â€” used by the FastAPI server. Headless, JSON-based, no prompts.
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# 
+# Stage runner  used by the FastAPI server. Headless, JSON-based, no prompts.
+# 
 import json as _json
 from datetime import date as _date
 
@@ -679,7 +805,7 @@ def stage(command_name, stage_name, state_file):
                 }
             else:
                 raise click.ClickException(f"Unknown stage for poll: {stage_name}")
-        elif command_name in ("run", "movies", "tv"):
+        elif command_name in ("run", "movies", "tv", "games"):
             from datetime import date as _date3
             if command_name == "run":
                 from src.content.run_stages import (
@@ -688,6 +814,11 @@ def stage(command_name, stage_name, state_file):
                 )
             elif command_name == "movies":
                 from src.content.movies_stages import (
+                    stage_fetch as cs_fetch, stage_build as cs_build,
+                    stage_regenerate_caption as cs_regen,
+                )
+            elif command_name == "games":
+                from src.content.games_stages import (
                     stage_fetch as cs_fetch, stage_build as cs_build,
                     stage_regenerate_caption as cs_regen,
                 )
@@ -797,5 +928,3 @@ def stage(command_name, stage_name, state_file):
 
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(_json.dumps(state, indent=2, default=str), encoding="utf-8")
-
-

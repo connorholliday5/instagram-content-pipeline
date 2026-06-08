@@ -167,6 +167,44 @@ def _place_poster(canvas: Image.Image, url: Optional[str],
                   font=nf, fill=WHITE, anchor="mm")
 
 
+def _draw_title_caption(canvas, box, text):
+    x1, y1, x2, y2 = [int(v) for v in box]
+    draw = ImageDraw.Draw(canvas)
+    cw = x2 - x1
+    fs = max(15, cw // 13)
+    f = _font("bold", fs)
+    words = (text or "").split()
+    lines, line = [], ""
+    for w in words:
+        test = (line + " " + w).strip()
+        if draw.textbbox((0, 0), test, font=f)[2] > cw - 16 and line:
+            lines.append(line)
+            line = w
+            if len(lines) == 2:
+                break
+        else:
+            line = test
+    if line and len(lines) < 2:
+        lines.append(line)
+    placed = sum(len(ln.split()) for ln in lines)
+    if placed < len(words) and lines:
+        last = lines[-1]
+        while last and draw.textbbox((0, 0), last + "...", font=f)[2] > cw - 16:
+            last = last[:-1].rstrip()
+        lines[-1] = (last + "...") if last else "..."
+    lh = fs + 4
+    bar_h = lh * len(lines) + 12
+    bar_top = max(y1, y2 - bar_h - 4)
+    ov = Image.new("RGBA", SIZE, (0, 0, 0, 0))
+    od = ImageDraw.Draw(ov)
+    od.rectangle([(x1 + 4, bar_top), (x2 - 4, y2 - 4)], fill=(0, 0, 0, 200))
+    canvas.alpha_composite(ov)
+    d = ImageDraw.Draw(canvas)
+    cx = (x1 + x2) // 2
+    for i, ln in enumerate(lines):
+        d.text((cx, bar_top + 8 + i * lh + lh // 2), ln, font=f, fill=(255, 255, 255, 245), anchor="mm")
+
+
 def _pill_overlay(canvas: Image.Image, box: tuple, line1: str,
                   line2: str, color: tuple):
     """Two-line pill overlay inside bottom of poster."""
@@ -379,6 +417,7 @@ def build_tv_top10(shows: list, month_date: date,
             _place_poster(canvas, get_poster_url(show),
                          (x1, y1, x1+cw, y1+ch),
                          ACCENT, idx+1, get_title(show))
+            _draw_title_caption(canvas, (x1, y1, x1+cw, y1+ch), get_title(show))
 
     _footer(canvas, month_date.strftime("%B %Y").upper())
     return _save(canvas, "tv_02_top10")

@@ -67,6 +67,13 @@ TRANSITIONS = {
     ("tv",     "review_carousel", "edit"):        "__complete__",
     ("tv",     "review_carousel", "regenerate"):  "regenerate_caption",
 
+    # games
+    ("games",  None, "start"):                  "fetch",
+    ("games",  "review_picks", "approve"):      "build",
+    ("games",  "review_carousel", "approve"):     "__complete__",
+    ("games",  "review_carousel", "edit"):        "__complete__",
+    ("games",  "review_carousel", "regenerate"):  "regenerate_caption",
+
     # review (book review)
     ("review", None, "start"):                  "draft",
     ("review", "review_draft", "approve"):      "build",
@@ -181,7 +188,9 @@ def _run_stage(pipeline_id: str, command: str, stage_name: str):
             errors="replace",
         )
 
-        for line in iter(proc.stdout.readline, ''):
+        stdout = proc.stdout
+        assert stdout is not None
+        for line in iter(stdout.readline, ''):
             line = line.rstrip()
             if line:
                 _append_log(pipeline_id, line)
@@ -313,6 +322,3 @@ def delete_pipeline(pipeline_id: str):
         raise HTTPException(status_code=404, detail="Pipeline not found")
     p.unlink()
     return {"deleted": pipeline_id}
-
-
-

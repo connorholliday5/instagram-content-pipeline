@@ -18,9 +18,7 @@ def _build_caption(pick_titles: list, today: date) -> str:
         release_date=month_str,
     )
     hashtags = (
-        "#MovieMonth #NewMovies #TheWatchtower #FilmTwitter #MovieLovers "
-        "#NowPlaying #ComingSoon #FilmCommunity #MovieNight #Cinema "
-        "#MovieRecommendations #WatchList #FilmFan #Movies2026"
+        "#Movies #Film #Cinema #FilmTwitter #MovieReview"
     )
     return f"{raw_caption}\n\n{hashtags}"
 

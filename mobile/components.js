@@ -202,15 +202,29 @@ export function CarouselReview({ artifact, apiBase, onAction, onEditCaption, onS
       <View style={{ height: 14 }} />
       <View style={s.captionHeader}>
         <Text style={s.editLabel}>Caption</Text>
-        <Pressable
-          onPress={async () => {
-            await Clipboard.setStringAsync(artifact.caption || """");
-            Alert.alert(""Copied"", ""Caption copied to clipboard"");
-          }}
-          hitSlop={8}
-        >
-          <Text style={s.copyLink}>Copy</Text>
-        </Pressable>
+        <View style={{ flexDirection: 'row', gap: 16 }}>
+          <Pressable
+            onPress={async () => {
+              await Clipboard.setStringAsync(artifact.caption || "");
+              Alert.alert("Copied", "Caption + hashtags copied");
+            }}
+            hitSlop={8}
+          >
+            <Text style={s.copyLink}>Copy all</Text>
+          </Pressable>
+          <Pressable
+            onPress={async () => {
+              const cap = artifact.caption || "";
+              const i = cap.indexOf("#");
+              const tags = i >= 0 ? cap.slice(i) : "";
+              await Clipboard.setStringAsync(tags);
+              Alert.alert(tags ? "Copied" : "No hashtags", tags ? "Hashtags copied" : "No hashtags found in caption");
+            }}
+            hitSlop={8}
+          >
+            <Text style={s.copyLink}>Copy tags</Text>
+          </Pressable>
+        </View>
       </View>
       <View style={s.captionBox}>
         <Text selectable style={s.captionText}>{artifact.caption}</Text>
@@ -431,7 +445,3 @@ const s = StyleSheet.create({
   ratingTxt: { color: '#888', fontSize: 13, fontWeight: '600' },
   ratingTxtOn: { color: '#fff' },
 });
-
-
-
-

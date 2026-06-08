@@ -2,7 +2,7 @@
 from datetime import date
 
 
-def _build_caption(top_count: int, pick_titles: list, collector_items: list, today: date) -> str:
+def _build_caption(top_count: int, pick_titles: list, collector_items: list, street_date: date) -> str:
     from src.caption.groq_caption import generate_caption
     pick_str = ", ".join(pick_titles) if pick_titles else "this week's top releases"
     collector_str = ", ".join([f"{c['title']} ({c['reason']})" for c in collector_items]) if collector_items else ""
@@ -11,12 +11,13 @@ def _build_caption(top_count: int, pick_titles: list, collector_items: list, tod
         category="comics",
         description=(
             f"Keep it under 3 sentences. No made-up creative team details. "
-            f"New comic book day - {top_count} releases this week. "
+            f"This is a preview posted ahead of time - {top_count} new comics drop "
+            f"this Wednesday. Frame it as a heads up so readers can plan their pull list. "
             f"Connor's picks: {pick_str}. "
             f"{'Collector highlights: ' + collector_str if collector_str else ''} "
-            f"End with a short question asking what's on their pull list."
+            f"End with a short question asking what's on their pull list this week."
         ),
-        release_date=today.strftime("%B %d, %Y"),
+        release_date=street_date.strftime("%B %d, %Y"),
     )
     hashtags = (
         "#NewComicBookDay #NCBD #TheWatchtower #DCComics #MarvelComics "
@@ -62,15 +63,18 @@ def stage_fetch(today_iso: str) -> dict:
 def stage_build(data: dict) -> dict:
     """Take picks indices + extras, build slides and caption."""
     from src.ingest.comicvine import (
-        search_issue,
+        search_issue, _upcoming_wednesday,
         get_cover_url, get_publisher, get_title,
     )
-    from src.generate.carousel import (
+    from src.generate.comics_carousel import (
         build_cover_slide, build_top10_slide,
         build_picks_slide, build_collectors_slide,
     )
 
     today = date.fromisoformat(data["today"])
+    # Posted Monday, about Wednesday's drop. All on-slide dates and the caption
+    # should read as the Wednesday street date, not the day the job runs.
+    street_date = _upcoming_wednesday(today)
     top_issues = data["top_issues_raw"]
     collector_items = data["collector_items"]
     picks_indices = data.get("picks", []) or []
@@ -94,15 +98,15 @@ def stage_build(data: dict) -> dict:
             pick_titles.append(s)
 
     slides = []
-    slides.append(str(build_cover_slide(today)))
+    slides.append(str(build_cover_slide(street_date)))
     slides.append(str(build_top10_slide(
-        top_issues, today, get_title, get_cover_url, get_publisher)))
+        top_issues, street_date, get_title, get_cover_url, get_publisher)))
     slides.append(str(build_picks_slide(
-        pick_issues, today, get_title, get_cover_url, get_publisher)))
+        pick_issues, street_date, get_title, get_cover_url, get_publisher)))
     if collector_items:
-        slides.append(str(build_collectors_slide(collector_items, today)))
+        slides.append(str(build_collectors_slide(collector_items, street_date)))
 
-    full_caption = _build_caption(len(top_issues), pick_titles, collector_items, today)
+    full_caption = _build_caption(len(top_issues), pick_titles, collector_items, street_date)
 
     return {
         "slides": slides,
@@ -112,8 +116,10 @@ def stage_build(data: dict) -> dict:
 
 
 def stage_regenerate_caption(data: dict) -> dict:
+    from src.ingest.comicvine import _upcoming_wednesday
     today = date.fromisoformat(data["today"])
+    street_date = _upcoming_wednesday(today)
     pick_titles = data.get("pick_titles", [])
     collector_items = data.get("collector_items", [])
     top_count = len(data.get("top_issues_raw", []))
-    return {"caption": _build_caption(top_count, pick_titles, collector_items, today)}
+    return {"caption": _build_caption(top_count, pick_titles, collector_items, street_date)}

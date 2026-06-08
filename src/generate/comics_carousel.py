@@ -206,6 +206,44 @@ def _place_cover(canvas: Image.Image, cover_url: Optional[str],
                   font=nf, fill=WHITE, anchor="mm")
 
 
+def _draw_title_caption(canvas, box, text):
+    x1, y1, x2, y2 = [int(v) for v in box]
+    draw = ImageDraw.Draw(canvas)
+    cw = x2 - x1
+    fs = max(15, cw // 13)
+    f = _font("bold", fs)
+    words = (text or "").split()
+    lines, line = [], ""
+    for w in words:
+        test = (line + " " + w).strip()
+        if draw.textbbox((0, 0), test, font=f)[2] > cw - 16 and line:
+            lines.append(line)
+            line = w
+            if len(lines) == 2:
+                break
+        else:
+            line = test
+    if line and len(lines) < 2:
+        lines.append(line)
+    placed = sum(len(ln.split()) for ln in lines)
+    if placed < len(words) and lines:
+        last = lines[-1]
+        while last and draw.textbbox((0, 0), last + "...", font=f)[2] > cw - 16:
+            last = last[:-1].rstrip()
+        lines[-1] = (last + "...") if last else "..."
+    lh = fs + 4
+    bar_h = lh * len(lines) + 12
+    bar_top = max(y1, y2 - bar_h - 4)
+    ov = Image.new("RGBA", SIZE, (0, 0, 0, 0))
+    od = ImageDraw.Draw(ov)
+    od.rectangle([(x1 + 4, bar_top), (x2 - 4, y2 - 4)], fill=(0, 0, 0, 200))
+    canvas.alpha_composite(ov)
+    d = ImageDraw.Draw(canvas)
+    cx = (x1 + x2) // 2
+    for i, ln in enumerate(lines):
+        d.text((cx, bar_top + 8 + i * lh + lh // 2), ln, font=f, fill=(255, 255, 255, 245), anchor="mm")
+
+
 REASON_DESCRIPTIONS = {
     "#1 ISSUE":         "Great jumping-on point",
     "FACSIMILE":        "Classic issue reprinted",
@@ -217,13 +255,13 @@ REASON_DESCRIPTIONS = {
     "COMPENDIUM":       "Massive value collection",
     "FIRST APPEARANCE": "Key character debut",
     "SPECIAL EDITION":  "Exclusive release",
-    "1:100 RATIO":      "Very rare — 1 per 100",
-    "1:50 RATIO":       "Rare — 1 per 50 ordered",
-    "1:25 RATIO":       "Limited — ask your LCS",
+    "1:100 RATIO":      "Very rare - 1 per 100",
+    "1:50 RATIO":       "Rare - 1 per 50 ordered",
+    "1:25 RATIO":       "Limited - ask your LCS",
     "1:10 RATIO":       "Incentive variant",
     "FOIL VARIANT":     "Special cover treatment",
     "GOLD FOIL":        "Premium foil cover",
-    "VIRGIN COVER":     "No logo — collector fave",
+    "VIRGIN COVER":     "No logo - collector fave",
     "CONNECTING CVR":   "Part of a set",
     "SKETCH COVER":     "Art-focused variant",
     "VARIANT":          "Ask your LCS for details",
@@ -393,9 +431,9 @@ def _draw_station(canvas: Image.Image, top_y: int, scale: float = 0.88):
     draw.ellipse([(cx-s(24),top_y+s(448)),(cx+s(24),top_y+s(466))],fill=C3)
 
 
-# ─────────────────────────────────────────────────────────
-# SLIDE 1 — COVER
-# ─────────────────────────────────────────────────────────
+# ---------------------------------------------------------
+# SLIDE 1 - COVER
+# ---------------------------------------------------------
 def build_cover_slide(week_date: date) -> Path:
     canvas = _base()  # stars full canvas
 
@@ -446,9 +484,9 @@ def build_cover_slide(week_date: date) -> Path:
     return _save(canvas, "slide_01_cover")
 
 
-# ─────────────────────────────────────────────────────────
-# SLIDE 2 — TOP 10
-# ─────────────────────────────────────────────────────────
+# ---------------------------------------------------------
+# SLIDE 2 - TOP 10
+# ---------------------------------------------------------
 def build_top10_slide(issues: list, week_date: date,
                       get_title, get_cover_url, get_publisher) -> Path:
     canvas = _base()
@@ -458,7 +496,6 @@ def build_top10_slide(issues: list, week_date: date,
     gt = header_bottom + 14
     gb = H - 78
 
-    # Top row: #1 wide (portrait) + #2
     # Top row: 2 equal portrait cells
     top_h = int((gb - gt) * 0.50)
     mid = W // 2 - pad // 2
@@ -471,15 +508,9 @@ def build_top10_slide(issues: list, week_date: date,
             color = _pub_color(get_publisher(issue))
             title = get_title(issue)
             _place_cover(canvas, get_cover_url(issue), box, color, i+1, title)
-            # Title label overlay on both top covers
-            d = ImageDraw.Draw(canvas)
-            lf = _font("bold", 28)
-            ly = int(box[3]) - 48
-            d.rectangle([(int(box[0]), ly), (int(box[2]), int(box[3]))],
-                         fill=(0, 0, 0, 185))
-            d.text((int(box[0]) + 10, ly + 8), title[:22], font=lf, fill=WHITE)
+            _draw_title_caption(canvas, box, title)
 
-    # Bottom 8 covers — 4 columns x 2 rows for portrait orientation
+    # Bottom 8 covers - 4 columns x 2 rows for portrait orientation
     bt = gt + top_h + pad
     bot_h = gb - bt
     cols, rows = 4, 2
@@ -498,14 +529,15 @@ def build_top10_slide(issues: list, week_date: date,
             _place_cover(canvas, get_cover_url(issue),
                          (x1, y1, x1+cw, y1+ch),
                          color, ii+1, get_title(issue))
+            _draw_title_caption(canvas, (x1, y1, x1+cw, y1+ch), get_title(issue))
 
     _footer(canvas, week_date.strftime("%b %d, %Y").upper(), show_legend=True)
     return _save(canvas, "slide_02_top10")
 
 
-# ─────────────────────────────────────────────────────────
-# SLIDE 3 — PICKS
-# ─────────────────────────────────────────────────────────
+# ---------------------------------------------------------
+# SLIDE 3 - PICKS
+# ---------------------------------------------------------
 def build_picks_slide(picks: list, week_date: date,
                       get_title, get_cover_url, get_publisher) -> Path:
     canvas = _base()
@@ -548,9 +580,9 @@ def build_picks_slide(picks: list, week_date: date,
     return _save(canvas, "slide_03_picks")
 
 
-# ─────────────────────────────────────────────────────────
-# SLIDE 4 — COLLECTOR'S CORNER
-# ─────────────────────────────────────────────────────────
+# ---------------------------------------------------------
+# SLIDE 4 - COLLECTOR'S CORNER
+# ---------------------------------------------------------
 def build_collectors_slide(items: list, week_date: date) -> Path:
     canvas = _base()
     header_bottom = _header(canvas, "COLLECTOR'S CORNER")
