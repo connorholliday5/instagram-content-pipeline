@@ -19,11 +19,7 @@ def _build_caption(top_count: int, pick_titles: list, collector_items: list, str
         ),
         release_date=street_date.strftime("%B %d, %Y"),
     )
-    hashtags = (
-        "#NewComicBookDay #NCBD #TheWatchtower #DCComics #MarvelComics "
-        "#IndieComics #ComicBookCommunity #WeeklyComics #ComicBooks "
-        "#NewRelease #ComicBookDay #PullList #ComicBookNerd #LCS #LocalComicShop"
-    )
+    hashtags = "#Comics #Marvel #DCComics #ComicBooks #NCBD"
     return f"{raw_caption}\n\n{hashtags}"
 
 
