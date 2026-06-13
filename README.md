@@ -6,216 +6,187 @@
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)
 
-An automated Instagram content pipeline for [@the.watch\_tower](https://instagram.com/the.watch_tower) — a pop culture account covering comics, movies, TV, and books. Generates production-quality carousel slides, AI-assisted captions, story polls, and a weekly content plan. Built as a portfolio signal for production LLM and automation work.
+An automated Instagram content pipeline for [@the.watch\_tower](https://instagram.com/the.watch_tower), a pop culture account covering comics, movies, TV, games, and books. Generates production-quality carousel slides, AI-assisted captions, story polls, and a weekly content plan. Built as a portfolio signal for production LLM and automation work.
 
 ---
 
-## iPhone App
+## Two ways to run it
 
-Every command below can be driven from an iPhone instead of a terminal. The app pairs with a local FastAPI server, streams pipeline output, lets you approve/edit/regenerate each step, and saves finished slides straight to Photos for posting.
-iPhone (Expo Go) -- HTTP --> FastAPI (port 8001) -- subprocess --> python -m app stage <cmd>
+Every command can be driven from a terminal or from an iPhone. The phone app pairs with a local FastAPI server, streams pipeline output, and lets you approve, edit, or regenerate each step before posting.
+
+```
+iPhone (Expo Go) -- HTTP --> FastAPI (port 8001) -- subprocess --> python -m app stage <cmd> <stage>
+```
 
 | Folder | Component |
 |---|---|
+| `src/cli.py` | Click CLI, one interactive command per content type |
+| `src/content/*_stages.py` | Pure stage functions (headless, JSON state) shared by the app |
 | `api/` | FastAPI server wrapping each command as a state machine |
 | `mobile/` | React Native (Expo SDK 54) app |
-| `src/content/*_stages.py` | Pure stage functions extracted from each CLI command |
 
-The CLI is unchanged. The app is purely additive.
+The CLI and the app run the same underlying logic. When changing a pipeline, both the CLI flow and the matching `*_stages.py` flow need to stay in sync.
 
 ---
 
-## What It Does
+## What it does
 
 | Command | Description | Cadence |
 |---|---|---|
-| `python -m app run` | Weekly New Comic Book Day carousel | Every Wednesday |
+| `python -m app run` | New Comic Book Day carousel | Posted Monday, about Wednesday's releases |
 | `python -m app movies` | Monthly top 10 anticipated movies + highest grossing | 1st of month |
 | `python -m app tv` | Monthly top 10 TV premieres + most popular last month | 1st of month |
+| `python -m app games` | Monthly top 10 game releases + most played on Steam | 1st of month |
 | `python -m app review` | Book review carousel with AI-assisted caption | As read |
 | `python -m app poll` | Daily story poll background for Instagram | Daily |
-| `python -m app ideate` | Weekly content plan — 7 polls + schedule | Every Monday |
+| `python -m app ideate` | Weekly content plan | Weekly |
 | `python -m app initdb` | Initialize SQLite database | One-time |
 
 ---
 
-## Pipeline Architecture
+## Comics pipeline (New Comic Book Day)
+
+The flagship weekly carousel. It is posted on Monday but is about the **upcoming Wednesday's** releases, so followers can plan their pull list ahead of time.
+
+Release data comes from **League of Comic Geeks** via the `comicgeeks` library, which is forward-looking and works anonymously. **ComicVine** is a fallback source only (it does not reliably carry future-week data). All dates are anchored to the upcoming Wednesday street date.
+
+| Slide | Content |
+|---|---|
+| 1 | Cover — Watchtower station illustration, upcoming Wednesday date |
+| 2 | Top 10 new releases, color-coded by publisher |
+| 3 | Watchtower's Picks — your selected issues |
+| 4 | Collector's Corner — flagship #1s, key issues, milestones |
+
+Ranking and filtering:
+
+- Top 10 is ranked by a franchise/character prominence scorer (`MARQUEE_SCORES`). Community pull-count ranking is not used because it requires authentication that the public endpoint blocks.
+- US/English market only: just the five color-coded publishers (DC, Marvel, Image, Dark Horse, IDW) are kept. Foreign editions and digital-only lines (Infinity Comics, etc.) are dropped.
+- Collector's Corner surfaces genuine key issues: variant/key keywords, milestone numbering, and `#1`s gated behind a marquee threshold so minor or licensed launches do not qualify. It is deduped against the top 10.
+
+Publisher color coding: DC (blue), Marvel (red), Image (orange), Dark Horse (green), IDW (yellow).
+
+---
+
+## Other content modules
+
+### Monthly Movies
+4-slide carousel from TMDB: cover, top 10 anticipated, your picks, top 3 highest grossing last month with revenue.
+
+### Monthly TV
+4-slide carousel from TMDB: cover, top 10 premiering this month, your picks, most popular last month with rating and vote count. US/English bias applied.
+
+### Monthly Games
+4-slide carousel from RAWG (releases) and Steam (live player counts): cover, top 10 releases, your picks, most played.
+
+### Book Review
+4-slide carousel posted as read, with AI-assisted review drafting and a running reading list tracked in SQLite.
+
+### Daily Story Poll
+Instagram Story background (1080x1920). Add Instagram's native poll sticker on top.
+
+### Weekly Ideation
+Generates a weekly content plan: an upcoming-Wednesday comic preview, a batch of daily poll questions, and monthly reminders.
+
+---
+
+## Architecture
 
 ```
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚                        CLI Entry Point                          â”‚
-â”‚                      python -m app <cmd>                        â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-             â”‚                   â”‚              â”‚
-    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”   â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”  â”Œâ”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-    â”‚  Data Ingest  â”‚   â”‚ Slide Builder â”‚  â”‚  Caption Engine  â”‚
-    â”‚               â”‚   â”‚               â”‚  â”‚                  â”‚
-    â”‚ Metron API    â”‚   â”‚ Pillow/PIL    â”‚  â”‚ Groq LLaMA 3.3   â”‚
-    â”‚ TMDB API      â”‚   â”‚ BebasNeue     â”‚  â”‚ 70B              â”‚
-    â”‚ Open Library  â”‚   â”‚ Oswald fonts  â”‚  â”‚                  â”‚
-    â””â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”˜   â””â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”˜  â””â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-             â”‚                   â”‚              â”‚
-             â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                          â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-                          â”‚   Output     â”‚
-                          â”‚              â”‚
-                          â”‚ JPG Slides   â”‚
-                          â”‚ Caption text â”‚
-                          â”‚ Poll slides  â”‚
-                          â”‚ Weekly plan  â”‚
-                          â””â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”˜
-                                 â”‚
-                    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-                    â”‚    Cloudinary CDN       â”‚
-                    â”‚  (image hosting for     â”‚
-                    â”‚   Instagram API)        â”‚
-                    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                 +-------------------------------+
+                 |        Entry points           |
+                 |  CLI  python -m app <cmd>      |
+                 |  App  FastAPI stage runner     |
+                 +--------------+----------------+
+                                |
+         +----------------------+----------------------+
+         |                      |                      |
+   +-----v------+        +------v------+        +------v-------+
+   | Data ingest|        | Slide build |        | Caption gen  |
+   |            |        |             |        |              |
+   | LCG / CV   |        | Pillow/PIL  |        | Groq LLaMA   |
+   | TMDB       |        | Bebas Neue  |        | 3.3 70B      |
+   | RAWG/Steam |        | Oswald      |        |              |
+   | OpenLibrary|        |             |        |              |
+   +-----+------+        +------+------+        +------+-------+
+         |                      |                      |
+         +----------------------+----------------------+
+                                |
+                          +-----v------+
+                          |   Output   |
+                          | JPG slides |
+                          | Captions   |
+                          | Poll/plans |
+                          +-----+------+
+                                |
+                         +------v-------+
+                         | Cloudinary   |
+                         +--------------+
 ```
 
 ---
 
-## Content Modules
-
-### ðŸ“š Weekly Comic Book Day (New Comic Book Day)
-4-slide carousel generated every Wednesday from live Metron API data.
-
-| Slide | Content |
-|---|---|
-| 1 | Cover â€” Watchtower station illustration, date |
-| 2 | Top 10 most anticipated releases â€” color-coded by publisher |
-| 3 | Watchtower's Picks â€” your selected issues |
-| 4 | Collector's Corner â€” #1 issues, ratio variants, key releases |
-
-Publisher color coding: DC (blue), Marvel (red), Image (orange), Dark Horse (green), IDW (yellow)
-
-### ðŸŽ¬ Monthly Movies
-4-slide carousel on the 1st of each month from TMDB.
-
-| Slide | Content |
-|---|---|
-| 1 | Cover |
-| 2 | Top 10 most anticipated by TMDB popularity score |
-| 3 | Your picks |
-| 4 | Top 3 highest grossing last month with revenue |
-
-### ðŸ“º Monthly TV
-4-slide carousel on the 1st of each month from TMDB.
-
-| Slide | Content |
-|---|---|
-| 1 | Cover |
-| 2 | Top 10 shows premiering this month |
-| 3 | Your picks |
-| 4 | Most popular last month â€” TMDB rating + vote count |
-
-### ðŸ“– Book Review
-4-slide carousel posted as read. AI-assisted review drafting.
-
-| Slide | Content |
-|---|---|
-| 1 | Book cover art + "BOOK REVIEW" title |
-| 2 | Cover, rating (0-5 in 0.5 steps), AI-drafted review |
-| 3 | 2026 Reading List â€” all books read with ratings |
-| 4 | Next read |
-
-### ðŸ—³ï¸ Daily Story Poll
-Instagram Story background (1080Ã—1920). Add Instagram's native poll sticker on top.
-
-### ðŸ“… Weekly Ideation
-Run every Monday. Generates:
-- Wednesday comic preview from Metron
-- 7 daily poll questions in one batch
-- 1st-of-month reminders for movies + TV
-- Saves `weekly_plan.txt` and all 7 poll slides
-
----
-
-## Tech Stack
+## Tech stack
 
 | Layer | Technology |
 |---|---|
 | Language | Python 3.13 |
 | Image generation | Pillow (PIL) |
-| Comic data | Metron API |
+| Comic data | League of Comic Geeks (`comicgeeks`), ComicVine (fallback) |
 | Movie/TV data | TMDB API |
+| Game data | RAWG API, Steam |
 | Book covers | Open Library API |
-| AI captions | Groq â€” LLaMA 3.3-70B |
+| AI captions | Groq, LLaMA 3.3 70B |
 | Image hosting | Cloudinary |
 | Database | SQLite |
 | CLI | Click + Rich |
+| API / app | FastAPI, React Native (Expo SDK 54) |
 | Fonts | Bebas Neue, Oswald |
 
 ---
 
 ## Setup
 
-### 1. Clone the repo
 ```bash
 git clone https://github.com/connorholliday5/instagram-content-pipeline
 cd instagram-content-pipeline
-```
-
-### 2. Install dependencies
-```bash
 pip install -r requirements.txt
 ```
 
-### 3. Add fonts
-Download and place in `assets/fonts/`:
-- [Bebas Neue](https://fonts.google.com/specimen/Bebas+Neue) â†’ `BebasNeue-Regular.ttf`
-- [Oswald](https://fonts.google.com/specimen/Oswald) â†’ `Oswald-Bold.ttf`, `Oswald-Regular.ttf`
+Place fonts in `assets/fonts/`: `BebasNeue-Regular.ttf`, `Oswald-Bold.ttf`, `Oswald-Regular.ttf`.
 
-### 4. Configure environment
-Copy `.env.example` to `.env` and fill in your keys:
-```bash
-cp .env.example .env
-```
+Copy `.env.example` to `.env` and fill in your keys, then initialize the database:
 
-### 5. Initialize database
 ```bash
 python -m app initdb
-python seed_books.py  # optional â€” seed past reads
-```
-
-### 6. Run from terminal
-```bash
 python -m app run        # dry run
 python -m app run --live # post live
 ```
 
-### 7. Or run from the iPhone
+To run from the iPhone, start two terminals from the project root:
 
-Three terminals:
+```powershell
+# Terminal 1 - API
+uvicorn api.main:app --host 0.0.0.0 --port 8001 --reload
 
-```bash
-# Terminal 1 — API
-cd api
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install fastapi "uvicorn[standard]"
-uvicorn main:app --host 0.0.0.0 --port 8001 --reload
-
-# Terminal 2 — Mobile
+# Terminal 2 - Mobile
 cd mobile
-npm install
+$env:REACT_NATIVE_PACKAGER_HOSTNAME="<your-pc-ip>"
 npx expo start
 ```
 
-Scan the QR code with the iPhone Camera (Expo Go must be installed). In the app's Settings screen, set the server URL to `http://<your-pc-ip>:8001`.
+Scan the QR code with the iPhone Camera (Expo Go installed). In the app, set the server URL to `http://<your-pc-ip>:8001`.
 
 ---
 
-## Environment Variables
-
-See `.env.example` for all required keys.
+## Environment variables
 
 | Variable | Description |
 |---|---|
-| `GROQ_API_KEY` | [Groq Console](https://console.groq.com) |
-| `TMDB_API_KEY` | [TMDB API](https://www.themoviedb.org/settings/api) |
-| `METRON_USERNAME` | [Metron](https://metron.cloud) account |
-| `METRON_PASSWORD` | Metron password |
-| `CLOUDINARY_CLOUD_NAME` | [Cloudinary](https://cloudinary.com) |
+| `GROQ_API_KEY` | Groq Console |
+| `TMDB_API_KEY` | TMDB API |
+| `COMICVINE_API_KEY` | ComicVine API (fallback comic source) |
+| `RAWG_API_KEY` | RAWG API (game releases) |
+| `CLOUDINARY_CLOUD_NAME` | Cloudinary |
 | `CLOUDINARY_API_KEY` | Cloudinary API key |
 | `CLOUDINARY_API_SECRET` | Cloudinary API secret |
 | `INSTAGRAM_BUSINESS_ACCOUNT_ID` | Instagram Business account ID |
@@ -223,44 +194,53 @@ See `.env.example` for all required keys.
 | `META_APP_ID` | Meta App ID |
 | `META_APP_SECRET` | Meta App secret |
 
+Note: `LCG_CI_SESSION` is intentionally left unset. League of Comic Geeks is used anonymously; a session cookie is not required and an invalid one causes request failures.
+
 ---
 
-## Project Structure
+## Project structure
 
 ```
 WatchTower/
-â”œâ”€â”€ app/
-â”‚   â””â”€â”€ __main__.py          # Entry point
-â”œâ”€â”€ assets/
-â”‚   â””â”€â”€ fonts/               # Bebas Neue, Oswald
-â”œâ”€â”€ output/                  # Generated slides
-â”‚   â””â”€â”€ weekly_plans/        # Saved content plans + poll JSON
-â”œâ”€â”€ src/
-â”‚   â”œâ”€â”€ caption/
-â”‚   â”‚   â””â”€â”€ groq_caption.py  # Groq LLaMA caption generation
-â”‚   â”œâ”€â”€ content/
-â”‚   â”‚   â””â”€â”€ ideate.py        # Weekly content ideation engine
-â”‚   â”œâ”€â”€ create/
-â”‚   â”‚   â””â”€â”€ review.py        # Book review CLI
-â”‚   â”œâ”€â”€ db/
-â”‚   â”‚   â””â”€â”€ models.py        # SQLite models
-â”‚   â”œâ”€â”€ generate/
-â”‚   â”‚   â”œâ”€â”€ carousel.py      # Comics slide builder
-â”‚   â”‚   â”œâ”€â”€ movies_carousel.py
-â”‚   â”‚   â”œâ”€â”€ tv_carousel.py
-â”‚   â”‚   â”œâ”€â”€ book_review.py
-â”‚   â”‚   â””â”€â”€ poll.py          # Story poll builder
-â”‚   â”œâ”€â”€ ingest/
-â”‚   â”‚   â”œâ”€â”€ metron.py        # Metron comic data
-â”‚   â”‚   â””â”€â”€ tmdb.py          # TMDB movie/TV data
-â”‚   â”œâ”€â”€ post/
-â”‚   â”‚   â”œâ”€â”€ carousel_post.py # Instagram posting
-â”‚   â”‚   â””â”€â”€ upload.py        # Cloudinary upload
-â”‚   â””â”€â”€ cli.py               # Click CLI commands
-â”œâ”€â”€ .env.example
-â”œâ”€â”€ requirements.txt
-â”œâ”€â”€ seed_books.py
-â””â”€â”€ watchtower.db
+├── app/                     # python -m app entry point
+├── api/
+│   └── main.py              # FastAPI state-machine server
+├── mobile/                  # React Native (Expo) app
+├── assets/fonts/            # Bebas Neue, Oswald
+├── output/                  # Generated slides
+│   └── pipelines/           # Per-run JSON state
+├── src/
+│   ├── caption/
+│   │   └── groq_caption.py
+│   ├── content/             # Headless stage functions + ideation
+│   │   ├── run_stages.py
+│   │   ├── movies_stages.py
+│   │   ├── tv_stages.py
+│   │   ├── games_stages.py
+│   │   ├── review_stages.py
+│   │   ├── poll_stages.py
+│   │   └── ideate.py
+│   ├── create/
+│   │   └── review.py
+│   ├── db/
+│   │   └── models.py
+│   ├── generate/
+│   │   ├── comics_carousel.py
+│   │   ├── movies_carousel.py
+│   │   ├── tv_carousel.py
+│   │   ├── games_carousel.py
+│   │   └── poll.py
+│   ├── ingest/
+│   │   ├── comicvine.py     # LCG primary + ComicVine fallback
+│   │   ├── tmdb.py
+│   │   ├── rawg.py
+│   │   └── steam.py
+│   ├── post/
+│   │   └── carousel_post.py
+│   └── cli.py
+├── .env.example
+├── requirements.txt
+└── watchtower.db
 ```
 
 ---
@@ -268,29 +248,21 @@ WatchTower/
 ## Roadmap
 
 - [x] Weekly comic carousel (New Comic Book Day)
-- [x] Monthly movies carousel
-- [x] Monthly TV carousel
+- [x] Monthly movies, TV, and games carousels
 - [x] Book review carousel with AI drafting
 - [x] Daily story poll generator
 - [x] Weekly content ideation engine
+- [x] FastAPI server + iPhone app
 - [ ] Instagram posting automation
 - [ ] Engagement bot (pending Meta app review)
-- [ ] DC Lore Model â€” fine-tuned LLaMA 3 for DM Q&A
+- [ ] DC Lore Model, fine-tuned LLaMA 3 for DM Q&A
 
 ---
 
-## Portfolio Notes
+## Portfolio notes
 
-This project demonstrates:
-- **Production LLM integration** â€” Groq LLaMA 3.3-70B for caption generation and poll question generation with structured prompting
-- **Multi-API orchestration** â€” Metron, TMDB, Open Library, Cloudinary, Meta Graph API
-- **Programmatic image generation** â€” Pillow-based slide builder with custom typography, publisher color coding, cover art fetching
-- **CLI tooling** â€” Click + Rich for interactive terminal workflows
-- **SQLite data persistence** â€” reading list tracking across sessions
-- **Modular architecture** â€” each content pillar is independently runnable
+This project demonstrates production LLM integration (Groq LLaMA 3.3 70B for captions and poll questions with structured prompting), multi-API orchestration (League of Comic Geeks, ComicVine, TMDB, RAWG, Steam, Open Library, Cloudinary, Meta Graph API), programmatic image generation (Pillow slide builder with custom typography, publisher color coding, and cover fetching), a shared CLI and FastAPI/React Native architecture, and SQLite persistence.
 
 ---
 
 *Built by [@connorholliday5](https://github.com/connorholliday5)*
-
-
