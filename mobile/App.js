@@ -9,13 +9,15 @@ import {
   PicksSelector, CarouselReview, CaptionEditor,
   BookInputForm, ReviewDraftView, ReviewTextEditor,
 } from './components';
+import OnDeviceComics from './render/OnDeviceComics';
 
 const DEFAULT_API_BASE = 'http://192.168.0.28:8001';
 const STORAGE_KEY = 'watchtower.apiBase';
 const FETCH_TIMEOUT_MS = 15000;
 
 const COMMANDS = [
-  { id: 'run',     label: 'Weekly Comics',   subtitle: 'New Comic Book Day carousel' },
+  { id: 'comics_local', label: 'Comics · On-Device', subtitle: 'Built on your phone — no PC needed' },
+  { id: 'run',     label: 'Weekly Comics',   subtitle: 'New Comic Book Day carousel (server)' },
   { id: 'movies',  label: 'Monthly Movies',  subtitle: 'Movies carousel' },
   { id: 'tv',      label: 'Monthly TV',      subtitle: 'TV carousel' },
   { id: 'games',   label: 'Monthly Games',   subtitle: 'Video game carousel' },
@@ -116,7 +118,11 @@ export default function App() {
   };
 
   const tapCommand = (cmd) => {
-    if (cmd.id === 'review') {
+    if (cmd.id === 'comics_local') {
+      // Fully on-device flow — no server involved.
+      setActiveCommand(cmd);
+      setScreen('ondevice');
+    } else if (cmd.id === 'review') {
       // Review needs the input form first
       setActiveCommand(cmd);
       setScreen('pipeline');
@@ -237,6 +243,11 @@ export default function App() {
     setError(null);
     setSubscreen('main');
   };
+
+  // ── On-Device Comics (no server) ─────────────────────────────────────────────
+  if (screen === 'ondevice') {
+    return <OnDeviceComics onBack={goBack} />;
+  }
 
   // ── Settings ────────────────────────────────────────────────────────────────
   if (screen === 'settings') {
