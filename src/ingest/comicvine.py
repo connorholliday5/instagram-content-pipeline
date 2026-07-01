@@ -475,10 +475,16 @@ def fetch_variants_and_collectors(start: date | None = None, limit: int = 4,
     # Primary: LCG week list (forward-looking, matches the top 10).
     lcg = _lcg_week_issues(start)
     if lcg:
-        # Don't repeat anything already shown on the top-10 slide.
+        scanned = _scan(lcg)
+        # Prefer collector items not already shown on the top-10 slide.
         ranked = sorted(lcg, key=_lcg_rank, reverse=True)
         exclude = {get_title(i) for i in ranked[:exclude_top]}
-        items = [x for x in _scan(lcg) if x["title"] not in exclude]
+        items = [x for x in scanned if x["title"] not in exclude]
+        # If de-duping against the top 10 leaves nothing (common on light
+        # weeks where every key issue is also a top pick), keep the collector
+        # slide alive by falling back to the full scan rather than dropping it.
+        if not items:
+            items = scanned
         if items:
             return items[:limit]
 

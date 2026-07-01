@@ -20,7 +20,8 @@ GREEN    = (0, 200, 100)
 RED      = (220, 30, 30)
 
 # Games accent color - violet
-ACCENT   = (150, 80, 255)
+ACCENT     = (150, 80, 255)
+ACCENT_DIM = (90, 48, 160)   # darker violet for the station's inner ring
 
 # Game key art is landscape (16:9), unlike movie/TV posters
 ASPECT = 16 / 9
@@ -323,7 +324,7 @@ def _draw_station(canvas: Image.Image, top_y: int, scale: float = 0.88):
             ov = Image.new("RGBA", SIZE, (0,0,0,0))
             od = ImageDraw.Draw(ov)
             od.ellipse([(cx-gr-add,gy-grv-add//3),(cx+gr+add,gy+grv+add//3)],
-                       fill=(255,120,0,alpha))
+                       fill=ACCENT+(alpha,))
             canvas.alpha_composite(ov)
     draw = ImageDraw.Draw(canvas)
 
@@ -343,10 +344,10 @@ def _draw_station(canvas: Image.Image, top_y: int, scale: float = 0.88):
 
     def ring(gy,gr,grv,width,alpha_fill=25):
         draw.ellipse([(cx-gr-4,gy-grv-4),(cx+gr+4,gy+grv+4)],fill=C3)
-        draw.ellipse([(cx-gr,gy-grv),(cx+gr,gy+grv)],outline=ORANGE,width=width)
-        draw.ellipse([(cx-gr+9,gy-grv+4),(cx+gr-9,gy+grv-4)],outline=(200,100,0,140),width=2)
+        draw.ellipse([(cx-gr,gy-grv),(cx+gr,gy+grv)],outline=ACCENT,width=width)
+        draw.ellipse([(cx-gr+9,gy-grv+4),(cx+gr-9,gy+grv-4)],outline=ACCENT_DIM+(140,),width=2)
         ov=Image.new("RGBA",SIZE,(0,0,0,0)); od=ImageDraw.Draw(ov)
-        od.ellipse([(cx-gr,gy-grv),(cx+gr,gy+grv)],fill=(255,120,0,alpha_fill))
+        od.ellipse([(cx-gr,gy-grv),(cx+gr,gy+grv)],fill=ACCENT+(alpha_fill,))
         canvas.alpha_composite(ov)
         d=ImageDraw.Draw(canvas)
         for deg in range(0,360,45):
@@ -357,7 +358,7 @@ def _draw_station(canvas: Image.Image, top_y: int, scale: float = 0.88):
 
     draw.line([(cx,top_y),(cx,top_y-s(52))],fill=(180,200,255,200),width=s(4))
     draw.line([(cx-s(20),top_y-s(28)),(cx+s(20),top_y-s(28))],fill=(150,165,200,180),width=s(3))
-    draw.ellipse([(cx-s(8),top_y-s(60)),(cx+s(8),top_y-s(44))],fill=(255,150,0))
+    draw.ellipse([(cx-s(8),top_y-s(60)),(cx+s(8),top_y-s(44))],fill=ACCENT)
 
     draw.ellipse([(cx-s(62),top_y-s(10)),(cx+s(62),top_y+s(20))],fill=C1)
     box(cx-s(62),top_y,cx+s(62),top_y+s(26),C1)
