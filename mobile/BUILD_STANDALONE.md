@@ -9,7 +9,36 @@ that server isn't reachable — nothing is removed, they simply stay server-base
 
 ---
 
-## What you need first
+## Fastest option if you have a Mac (free, test it today)
+
+This puts the **real standalone app** on your iPhone for **free** — no $99 account,
+no cloud build. The catch: a free Apple ID signs apps for only **7 days**, after
+which you re-plug to the Mac and re-run the command. Great for trying it now;
+switch to TestFlight (below) when you want it permanent.
+
+1. Install **Xcode** from the Mac App Store (once).
+2. Plug your iPhone into the Mac with a cable; tap **Trust** on the phone.
+3. In a terminal, in the `mobile/` folder:
+   ```bash
+   npx expo install react-native-webview   # if not already installed
+   npx expo run:ios --device --configuration Release
+   ```
+   - Pick your iPhone from the device list.
+   - If it asks for a signing team, open the generated `ios/` project in Xcode
+     once, select your personal Apple ID team under Signing & Capabilities, then
+     re-run the command.
+4. First launch: on the phone go to **Settings → General → VPN & Device
+   Management → [your Apple ID] → Trust**.
+
+`--configuration Release` bundles the JavaScript into the app, so it runs with
+**no Metro and no computer** — you can unplug and use it anywhere (for 7 days).
+
+For a version that never expires and installs with no cable at all, use the
+TestFlight route below.
+
+---
+
+## What you need first (permanent / TestFlight route)
 
 1. **A free Expo account** — sign up at https://expo.dev.
 2. **An Apple Developer account ($99/year)** — https://developer.apple.com/programs.
