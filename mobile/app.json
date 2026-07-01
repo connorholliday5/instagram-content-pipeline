@@ -1,4 +1,4 @@
-﻿{
+{
   "expo": {
     "name": "TheWatchTower",
     "slug": "watchtower-mobile",
@@ -12,16 +12,28 @@
       "backgroundColor": "#0a0a0a"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.thewatchtower.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0a0a0a"
-      }
+      },
+      "package": "com.thewatchtower.app"
     },
     "web": {
       "favicon": "./assets/icon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow TheWatchTower to access your photos.",
+          "savePhotosPermission": "Allow TheWatchTower to save finished slides to your Photos.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ]
+    ]
   }
 }
