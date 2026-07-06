@@ -111,8 +111,12 @@ def fetch_anticipated_movies(target: date = None, limit: int = 10) -> list[dict]
             break
         page += 1
 
-    return _ranked_capped(results, _movie_anticipation,
-                          lambda x: _is_comic_hero(get_movie_title(x)), limit)
+    results = [m for m in results if m.get("poster_path")]
+    caps = [
+        (lambda x: not _is_western_movie(x), max(1, round(limit * MOVIE_MAX_NONWESTERN_SHARE))),
+        (lambda x: _is_comic_hero(get_movie_title(x)), max(1, round(limit * COMIC_MAX_SHARE))),
+    ]
+    return _select_balanced(results, _movie_anticipation, limit, caps)
 
 
 def fetch_top_grossing_last_month(target: date = None, limit: int = 3) -> list[dict]:
@@ -276,6 +280,17 @@ MOVIE_WEIGHTS = {"western": 0.7, "comic_hero": 1.2, "fantasy": 1.0, "animation":
 # the slots go to the highest-ranked non-comic titles.
 COMIC_MAX_SHARE = 0.5
 
+# Cap non-American/European titles so the carousels stay mostly Western. The
+# limited non-Western slots go to the highest-scoring foreign content, which —
+# after the anime boost and the penalty on everything else — is good anime. TV
+# is stricter than movies. Bumped up/down to allow more or less foreign content.
+MAX_NONWESTERN_SHARE = 0.3          # TV: ~70% American / European
+MOVIE_MAX_NONWESTERN_SHARE = 0.4    # movies: less strict about region
+
+# "Most popular last month" needs real audience traction — ignore obscure
+# entries with only a handful of votes so a 3-vote show can't rank #1.
+POPULAR_MIN_VOTES = 50
+
 
 def _is_comic_hero(title: str) -> bool:
     t = (title or "").lower()
@@ -337,30 +352,37 @@ def _movie_anticipation(movie: dict) -> float:
     return pop * weight
 
 
-def _ranked_capped(items: list[dict], score, is_comic, limit: int,
-                   comic_share: float = COMIC_MAX_SHARE) -> list[dict]:
-    """Rank by `score`, but cap comic/superhero titles at `comic_share` of the
-    list so non-comic content is always represented. Over-cap comic titles are
-    only used to backfill when there isn't enough non-comic to fill the slots.
+def _select_balanced(items: list[dict], score, limit: int, caps) -> list[dict]:
+    """Rank by `score`, enforcing per-category maximums so no single kind of
+    content dominates a carousel. `caps` is a list of (predicate, max_count):
+    an item is placed only if every category it belongs to still has room.
+    Over-cap items backfill any unused slots in score order.
     """
     ranked = sorted(items, key=score, reverse=True)
-    max_comic = max(1, round(limit * comic_share))
-    out, deferred, comic_count = [], [], 0
+    counts = [0] * len(caps)
+    out, deferred = [], []
     for it in ranked:
         if len(out) >= limit:
             break
-        if is_comic(it):
-            if comic_count < max_comic:
-                out.append(it); comic_count += 1
-            else:
-                deferred.append(it)
-        else:
-            out.append(it)
-    for it in deferred:  # backfill only if we ran short on non-comic titles
+        if any(pred(it) and counts[i] >= mx for i, (pred, mx) in enumerate(caps)):
+            deferred.append(it)
+            continue
+        out.append(it)
+        for i, (pred, mx) in enumerate(caps):
+            if pred(it):
+                counts[i] += 1
+    for it in deferred:  # backfill only if caps left the carousel short
         if len(out) >= limit:
             break
         out.append(it)
     return sorted(out, key=score, reverse=True)[:limit]
+
+
+def _tv_caps(limit: int):
+    return [
+        (lambda x: not _is_western(x), max(1, round(limit * MAX_NONWESTERN_SHARE))),
+        (lambda x: _is_comic_hero(get_show_title(x)), max(1, round(limit * COMIC_MAX_SHARE))),
+    ]
 
 
 def fetch_anticipated_shows(target: date = None, limit: int = 10) -> list[dict]:
@@ -368,7 +390,8 @@ def fetch_anticipated_shows(target: date = None, limit: int = 10) -> list[dict]:
     Fetch TV shows premiering this month that are available in the US, then
     rank by weighted anticipation (_tv_anticipation): American / European,
     good anime, and comic/superhero content — especially animated superhero
-    shows — are boosted.
+    shows — are boosted. Non-Western titles are capped (MAX_NONWESTERN_SHARE)
+    so the list stays mostly American / European instead of all anime.
     """
     start, end = _month_range(target)
     results = []
@@ -390,14 +413,15 @@ def fetch_anticipated_shows(target: date = None, limit: int = 10) -> list[dict]:
             break
         page += 1
 
-    return _ranked_capped(results, _tv_anticipation,
-                          lambda x: _is_comic_hero(get_show_title(x)), limit)
+    results = [s for s in results if s.get("poster_path")]
+    return _select_balanced(results, _tv_anticipation, limit, _tv_caps(limit))
 
 
 def fetch_popular_shows_last_month(target: date = None, limit: int = 3) -> list[dict]:
     """
     Most popular shows from last month, American / European first to match the
-    top 10 ranking.
+    top 10 ranking. Requires a poster and a real vote count so obscure,
+    barely-rated entries don't sneak onto the slide.
     """
     start, end = _prev_month_range(target)
     results = []
@@ -419,8 +443,10 @@ def fetch_popular_shows_last_month(target: date = None, limit: int = 3) -> list[
             break
         page += 1
 
-    return _ranked_capped(results, _tv_anticipation,
-                          lambda x: _is_comic_hero(get_show_title(x)), limit)
+    results = [s for s in results
+               if s.get("poster_path") and (s.get("vote_count", 0) or 0) >= POPULAR_MIN_VOTES]
+    caps = [(lambda x: not _is_western(x), max(1, round(limit * MAX_NONWESTERN_SHARE)))]
+    return _select_balanced(results, _tv_anticipation, limit, caps)
 
 
 def get_show_vote_average(show: dict) -> float:
