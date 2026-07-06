@@ -86,8 +86,10 @@ def format_revenue(n: int) -> str:
 
 def fetch_anticipated_movies(target: date = None, limit: int = 10) -> list[dict]:
     """
-    Fetch top anticipated movies releasing this month,
-    sorted by TMDB popularity descending.
+    Fetch top anticipated movies releasing this month, ranked by weighted
+    anticipation (_movie_anticipation: western + comic/superhero + fantasy/
+    sci-fi + animation boosts) with comic titles capped so non-comic films
+    stay represented.
     """
     start, end = _month_range(target)
     results = []
@@ -109,7 +111,8 @@ def fetch_anticipated_movies(target: date = None, limit: int = 10) -> list[dict]
             break
         page += 1
 
-    return _ranked_by(results, _movie_anticipation, limit)
+    return _ranked_capped(results, _movie_anticipation,
+                          lambda x: _is_comic_hero(get_movie_title(x)), limit)
 
 
 def fetch_top_grossing_last_month(target: date = None, limit: int = 3) -> list[dict]:
@@ -191,6 +194,12 @@ ANIMATION_GENRE_ID = 16
 GOOD_ANIME_MIN_RATING = 7.0
 GOOD_ANIME_MIN_VOTES = 30
 
+# Sci-fi / fantasy genre boost (e.g. House of the Dragon, The Witcher, Dune).
+# TMDB lumps them into one genre id for TV (10765 "Sci-Fi & Fantasy"); for
+# movies they are split into Fantasy (14) and Science Fiction (878).
+SCIFI_FANTASY_TV_GENRE = 10765
+FANTASY_MOVIE_GENRES = {14, 878}
+
 
 def _is_western(show: dict) -> bool:
     """American / European by origin country. Falls back to English language
@@ -259,13 +268,25 @@ WESTERN_LANGUAGES = {
 # movies use the same idea but softer, and treat any animated film as welcome
 # if it's anticipated. Content matching none of the signals is demoted by the
 # "other" penalty instead of getting a bonus.
-TV_WEIGHTS = {"western": 2.5, "good_anime": 1.5, "comic_hero": 2.0, "animation": 0.5, "other": 0.3}
-MOVIE_WEIGHTS = {"western": 0.7, "comic_hero": 1.2, "animation": 0.8, "other": 0.6}
+TV_WEIGHTS = {"western": 2.5, "good_anime": 1.5, "comic_hero": 2.0, "fantasy": 1.5, "animation": 0.5, "other": 0.3}
+MOVIE_WEIGHTS = {"western": 0.7, "comic_hero": 1.2, "fantasy": 1.0, "animation": 0.8, "other": 0.6}
+
+# Cap comic/superhero titles at this share of a carousel so non-comic content
+# (fantasy, sci-fi, drama, animation, etc.) is always represented. The rest of
+# the slots go to the highest-ranked non-comic titles.
+COMIC_MAX_SHARE = 0.5
 
 
 def _is_comic_hero(title: str) -> bool:
     t = (title or "").lower()
     return any(term in t for term in COMIC_HERO_TERMS)
+
+
+def _is_scifi_fantasy(obj: dict, is_tv: bool) -> bool:
+    ids = obj.get("genre_ids") or [g.get("id") for g in obj.get("genres", [])] or []
+    if is_tv:
+        return SCIFI_FANTASY_TV_GENRE in ids
+    return any(g in FANTASY_MOVIE_GENRES for g in ids)
 
 
 def _is_western_movie(movie: dict) -> bool:
@@ -289,6 +310,8 @@ def _tv_anticipation(show: dict) -> float:
         weight += TV_WEIGHTS["good_anime"]; preferred = True
     if _is_comic_hero(get_show_title(show)):
         weight += TV_WEIGHTS["comic_hero"]; preferred = True
+    if _is_scifi_fantasy(show, is_tv=True):
+        weight += TV_WEIGHTS["fantasy"]; preferred = True
     if preferred and _is_animation(show):
         weight += TV_WEIGHTS["animation"]  # extra nudge for animated preferred content
     if not preferred:
@@ -307,13 +330,37 @@ def _movie_anticipation(movie: dict) -> float:
         weight += MOVIE_WEIGHTS["animation"]; preferred = True
     if _is_comic_hero(get_movie_title(movie)):
         weight += MOVIE_WEIGHTS["comic_hero"]; preferred = True
+    if _is_scifi_fantasy(movie, is_tv=False):
+        weight += MOVIE_WEIGHTS["fantasy"]; preferred = True
     if not preferred:
         weight = MOVIE_WEIGHTS["other"]
     return pop * weight
 
 
-def _ranked_by(items: list[dict], score, limit: int) -> list[dict]:
-    return sorted(items, key=score, reverse=True)[:limit]
+def _ranked_capped(items: list[dict], score, is_comic, limit: int,
+                   comic_share: float = COMIC_MAX_SHARE) -> list[dict]:
+    """Rank by `score`, but cap comic/superhero titles at `comic_share` of the
+    list so non-comic content is always represented. Over-cap comic titles are
+    only used to backfill when there isn't enough non-comic to fill the slots.
+    """
+    ranked = sorted(items, key=score, reverse=True)
+    max_comic = max(1, round(limit * comic_share))
+    out, deferred, comic_count = [], [], 0
+    for it in ranked:
+        if len(out) >= limit:
+            break
+        if is_comic(it):
+            if comic_count < max_comic:
+                out.append(it); comic_count += 1
+            else:
+                deferred.append(it)
+        else:
+            out.append(it)
+    for it in deferred:  # backfill only if we ran short on non-comic titles
+        if len(out) >= limit:
+            break
+        out.append(it)
+    return sorted(out, key=score, reverse=True)[:limit]
 
 
 def fetch_anticipated_shows(target: date = None, limit: int = 10) -> list[dict]:
@@ -343,7 +390,8 @@ def fetch_anticipated_shows(target: date = None, limit: int = 10) -> list[dict]:
             break
         page += 1
 
-    return _ranked_by(results, _tv_anticipation, limit)
+    return _ranked_capped(results, _tv_anticipation,
+                          lambda x: _is_comic_hero(get_show_title(x)), limit)
 
 
 def fetch_popular_shows_last_month(target: date = None, limit: int = 3) -> list[dict]:
@@ -371,7 +419,8 @@ def fetch_popular_shows_last_month(target: date = None, limit: int = 3) -> list[
             break
         page += 1
 
-    return _ranked_by(results, _tv_anticipation, limit)
+    return _ranked_capped(results, _tv_anticipation,
+                          lambda x: _is_comic_hero(get_show_title(x)), limit)
 
 
 def get_show_vote_average(show: dict) -> float:
