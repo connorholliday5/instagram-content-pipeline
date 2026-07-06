@@ -4,6 +4,7 @@ import threading
 import traceback
 import json
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
@@ -12,7 +13,21 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 WATCHTOWER_DIR = Path(__file__).resolve().parent.parent
-WATCHTOWER_PYTHON = WATCHTOWER_DIR / "venv" / "Scripts" / "python.exe"
+
+
+def _venv_python(base: Path) -> Path:
+    """Locate the project venv's Python across OSes (Windows Scripts/, else
+    bin/), falling back to whatever interpreter is running this server."""
+    win = base / "venv" / "Scripts" / "python.exe"
+    nix = base / "venv" / "bin" / "python"
+    if win.exists():
+        return win
+    if nix.exists():
+        return nix
+    return Path(sys.executable)
+
+
+WATCHTOWER_PYTHON = _venv_python(WATCHTOWER_DIR)
 WATCHTOWER_OUTPUT = WATCHTOWER_DIR / "output"
 PIPELINES_DIR = WATCHTOWER_OUTPUT / "pipelines"
 WATCHTOWER_OUTPUT.mkdir(parents=True, exist_ok=True)

@@ -1,4 +1,5 @@
 ﻿import os
+import sys
 import subprocess
 import click
 from datetime import date, datetime, timedelta
@@ -34,7 +35,17 @@ def _cleanup_output(days: int = 7):
 
 
 def open_image(path: str):
-    subprocess.Popen(["explorer", path.replace("/", "\\")])
+    """Open an image in the OS default viewer. Best-effort — a missing viewer
+    (e.g. headless) must never crash the pipeline."""
+    try:
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", path])
+        elif sys.platform.startswith("win"):
+            os.startfile(path.replace("/", "\\"))  # type: ignore[attr-defined]
+        else:
+            subprocess.Popen(["xdg-open", path])
+    except Exception:
+        pass
 
 
 
@@ -683,8 +694,7 @@ def poll():
         slide_path = build_poll_story(poll_data, today)
         console.log(f"[green][/green] {slide_path}")
 
-        import subprocess
-        subprocess.Popen(["explorer", str(slide_path).replace("/", "\\")])
+        open_image(str(slide_path))
 
         console.print(f"\n[bold green] Poll ready: {slide_path}[/bold green]")
         console.print("[dim]Post to Instagram Story manually.[/dim]")
