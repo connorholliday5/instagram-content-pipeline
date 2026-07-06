@@ -198,10 +198,12 @@ ANIMATION_GENRE_ID = 16
 GOOD_ANIME_MIN_RATING = 7.0
 GOOD_ANIME_MIN_VOTES = 30
 
-# Sci-fi / fantasy genre boost (e.g. House of the Dragon, The Witcher, Dune).
-# TMDB lumps them into one genre id for TV (10765 "Sci-Fi & Fantasy"); for
-# movies they are split into Fantasy (14) and Science Fiction (878).
+# Genre ids that define this account's geek/genre lane. TV is filtered to these
+# (plus comic/superhero titles) so generic drama / rom-com / reality / soap gets
+# demoted no matter where it's from. TMDB TV: 10765 Sci-Fi & Fantasy, 10759
+# Action & Adventure, 16 Animation. Movies split fantasy/sci-fi into 14 / 878.
 SCIFI_FANTASY_TV_GENRE = 10765
+ACTION_ADVENTURE_TV_GENRE = 10759
 FANTASY_MOVIE_GENRES = {14, 878}
 
 
@@ -272,7 +274,12 @@ WESTERN_LANGUAGES = {
 # movies use the same idea but softer, and treat any animated film as welcome
 # if it's anticipated. Content matching none of the signals is demoted by the
 # "other" penalty instead of getting a bonus.
-TV_WEIGHTS = {"western": 2.5, "good_anime": 1.5, "comic_hero": 2.0, "fantasy": 1.5, "animation": 0.5, "other": 0.3}
+# TV leads with genre (this is a geek account): sci-fi/fantasy, action/adventure,
+# animation, and comic/superhero are the lane. Region (western) and rating (good
+# anime) are secondary nudges among that genre content; anything that isn't genre
+# content is demoted by "other".
+TV_WEIGHTS = {"fantasy": 2.5, "action": 1.5, "comic_hero": 2.5, "animation": 1.0,
+              "western": 1.0, "good_anime": 1.0, "other": 0.2}
 MOVIE_WEIGHTS = {"western": 0.7, "comic_hero": 1.2, "fantasy": 1.0, "animation": 0.8, "other": 0.6}
 
 # Cap comic/superhero titles at this share of a carousel so non-comic content
@@ -313,23 +320,39 @@ def _is_western_movie(movie: dict) -> bool:
     return (movie.get("original_language") or "") in WESTERN_LANGUAGES
 
 
+def _is_geek_tv(show: dict) -> bool:
+    """Genre content that fits the account: sci-fi/fantasy, action/adventure,
+    animation, or a comic/superhero title."""
+    genres = show.get("genre_ids") or [g.get("id") for g in show.get("genres", [])] or []
+    if SCIFI_FANTASY_TV_GENRE in genres or ACTION_ADVENTURE_TV_GENRE in genres:
+        return True
+    if _is_animation(show):
+        return True
+    return _is_comic_hero(get_show_title(show))
+
+
 def _tv_anticipation(show: dict) -> float:
-    """Effective anticipation for a show: popularity scaled by bias weights.
-    Western + good anime + comic/superhero are boosted (superhero animation
-    stacks all of them); unrelated foreign content is demoted."""
+    """Effective anticipation for a show. This is a geek/genre account, so genre
+    content — sci-fi & fantasy, action/adventure, animation, comic/superhero — is
+    the lane. Region (western) and rating (good anime) are secondary nudges among
+    that genre content. Generic drama / rom-com / reality / soap is demoted."""
     pop = show.get("popularity", 0.0) or 0.0
-    weight, preferred = 1.0, False
-    if _is_western(show):
-        weight += TV_WEIGHTS["western"]; preferred = True
-    if _is_good_animation(show):
-        weight += TV_WEIGHTS["good_anime"]; preferred = True
+    genres = show.get("genre_ids") or [g.get("id") for g in show.get("genres", [])] or []
+    weight, geek = 1.0, False
+    if SCIFI_FANTASY_TV_GENRE in genres:
+        weight += TV_WEIGHTS["fantasy"]; geek = True
+    if ACTION_ADVENTURE_TV_GENRE in genres:
+        weight += TV_WEIGHTS["action"]; geek = True
+    if _is_animation(show):
+        weight += TV_WEIGHTS["animation"]; geek = True
     if _is_comic_hero(get_show_title(show)):
-        weight += TV_WEIGHTS["comic_hero"]; preferred = True
-    if _is_scifi_fantasy(show, is_tv=True):
-        weight += TV_WEIGHTS["fantasy"]; preferred = True
-    if preferred and _is_animation(show):
-        weight += TV_WEIGHTS["animation"]  # extra nudge for animated preferred content
-    if not preferred:
+        weight += TV_WEIGHTS["comic_hero"]; geek = True
+    if geek:
+        if _is_western(show):
+            weight += TV_WEIGHTS["western"]
+        if _is_good_animation(show):
+            weight += TV_WEIGHTS["good_anime"]
+    else:
         weight = TV_WEIGHTS["other"]
     return pop * weight
 
