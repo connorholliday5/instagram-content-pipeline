@@ -109,8 +109,7 @@ def fetch_anticipated_movies(target: date = None, limit: int = 10) -> list[dict]
             break
         page += 1
 
-    results.sort(key=lambda m: m.get("popularity", 0), reverse=True)
-    return results[:limit]
+    return _ranked_by(results, _movie_anticipation, limit)
 
 
 def fetch_top_grossing_last_month(target: date = None, limit: int = 3) -> list[dict]:
@@ -221,29 +220,108 @@ def _is_good_animation(show: dict) -> bool:
     return True  # too few votes to rate yet — let popularity decide
 
 
-def _is_preferred(show: dict) -> bool:
-    """Surfaced first: American / European shows plus good animated shows / anime."""
-    return _is_western(show) or _is_good_animation(show)
+# Comic-book / superhero franchises (and a few comic-adjacent ones). Matched
+# against the title so shows/movies like "My Adventures with Superman" or
+# "Batman: Caped Crusader" get a ranking boost — especially the animated ones.
+COMIC_HERO_TERMS = {
+    # Marvel
+    "marvel", "spider-man", "spider man", "spiderman", "x-men", "wolverine",
+    "deadpool", "avengers", "venom", "daredevil", "fantastic four",
+    "captain america", "captain marvel", "iron man", "thor", "hulk",
+    "black panther", "guardians of the galaxy", "moon knight", "loki",
+    "wandavision", "hawkeye", "ironheart", "agatha", "punisher", "blade",
+    "ghost rider", "wakanda", "x-force", "eyes of wakanda",
+    # DC
+    "superman", "batman", "wonder woman", "justice league", "the flash",
+    "green lantern", "green arrow", "aquaman", "shazam", "supergirl",
+    "teen titans", "harley quinn", "suicide squad", "peacemaker",
+    "blue beetle", "gotham", "titans", "doom patrol", "creature commandos",
+    "the penguin", "joker", "nightwing", "swamp thing", "constantine",
+    "my adventures with superman", "caped crusader",
+    # Other comics / comic-adjacent
+    "the boys", "invincible", "the walking dead", "hellboy", "spawn",
+    "kick-ass", "kingsman", "umbrella academy", "sandman", "watchmen",
+    "sweet tooth", "y the last man", "paper girls", "locke & key",
+    "the old guard", "kraven", "sin city", "v for vendetta",
+    "teenage mutant ninja turtles", "tmnt", "transformers",
+    "superhero", "super hero", "super-hero",
+}
+
+# Western languages for the (less strict) movie region bias, used when a movie
+# has no origin_country. TV uses country codes (PREFERRED_TV_COUNTRIES) instead.
+WESTERN_LANGUAGES = {
+    "en", "fr", "de", "es", "it", "nl", "sv", "no", "da", "fi", "is",
+    "pt", "pl", "cs", "el", "hu", "ro", "ga",
+}
+
+# Anticipation weights (added to a base of 1.0, then multiplied by TMDB
+# popularity — the anticipation proxy). TV leans harder on region + comics;
+# movies use the same idea but softer, and treat any animated film as welcome
+# if it's anticipated. Content matching none of the signals is demoted by the
+# "other" penalty instead of getting a bonus.
+TV_WEIGHTS = {"western": 2.5, "good_anime": 1.5, "comic_hero": 2.0, "animation": 0.5, "other": 0.3}
+MOVIE_WEIGHTS = {"western": 0.7, "comic_hero": 1.2, "animation": 0.8, "other": 0.6}
 
 
-def _ranked_preferred_first(shows: list[dict], limit: int) -> list[dict]:
-    """
-    American / European shows and good anime first, ranked by popularity.
-    Everything else only backfills when there aren't enough preferred shows to
-    fill the carousel, so the result is mostly Western plus quality animation.
-    """
-    by_pop = sorted(shows, key=lambda s: s.get("popularity", 0.0) or 0.0, reverse=True)
-    preferred = [s for s in by_pop if _is_preferred(s)]
-    if len(preferred) >= limit:
-        return preferred[:limit]
-    rest = [s for s in by_pop if not _is_preferred(s)]
-    return (preferred + rest)[:limit]
+def _is_comic_hero(title: str) -> bool:
+    t = (title or "").lower()
+    return any(term in t for term in COMIC_HERO_TERMS)
+
+
+def _is_western_movie(movie: dict) -> bool:
+    """Movie region bias (less strict than TV): origin country when present,
+    otherwise original language."""
+    countries = movie.get("origin_country") or []
+    if any(c in PREFERRED_TV_COUNTRIES for c in countries):
+        return True
+    return (movie.get("original_language") or "") in WESTERN_LANGUAGES
+
+
+def _tv_anticipation(show: dict) -> float:
+    """Effective anticipation for a show: popularity scaled by bias weights.
+    Western + good anime + comic/superhero are boosted (superhero animation
+    stacks all of them); unrelated foreign content is demoted."""
+    pop = show.get("popularity", 0.0) or 0.0
+    weight, preferred = 1.0, False
+    if _is_western(show):
+        weight += TV_WEIGHTS["western"]; preferred = True
+    if _is_good_animation(show):
+        weight += TV_WEIGHTS["good_anime"]; preferred = True
+    if _is_comic_hero(get_show_title(show)):
+        weight += TV_WEIGHTS["comic_hero"]; preferred = True
+    if preferred and _is_animation(show):
+        weight += TV_WEIGHTS["animation"]  # extra nudge for animated preferred content
+    if not preferred:
+        weight = TV_WEIGHTS["other"]
+    return pop * weight
+
+
+def _movie_anticipation(movie: dict) -> float:
+    """Effective anticipation for a movie. Same idea as TV but softer, and any
+    anticipated animated movie counts as preferred."""
+    pop = movie.get("popularity", 0.0) or 0.0
+    weight, preferred = 1.0, False
+    if _is_western_movie(movie):
+        weight += MOVIE_WEIGHTS["western"]; preferred = True
+    if _is_animation(movie):
+        weight += MOVIE_WEIGHTS["animation"]; preferred = True
+    if _is_comic_hero(get_movie_title(movie)):
+        weight += MOVIE_WEIGHTS["comic_hero"]; preferred = True
+    if not preferred:
+        weight = MOVIE_WEIGHTS["other"]
+    return pop * weight
+
+
+def _ranked_by(items: list[dict], score, limit: int) -> list[dict]:
+    return sorted(items, key=score, reverse=True)[:limit]
 
 
 def fetch_anticipated_shows(target: date = None, limit: int = 10) -> list[dict]:
     """
     Fetch TV shows premiering this month that are available in the US, then
-    rank American / European shows and good anime first (_ranked_preferred_first).
+    rank by weighted anticipation (_tv_anticipation): American / European,
+    good anime, and comic/superhero content — especially animated superhero
+    shows — are boosted.
     """
     start, end = _month_range(target)
     results = []
@@ -265,7 +343,7 @@ def fetch_anticipated_shows(target: date = None, limit: int = 10) -> list[dict]:
             break
         page += 1
 
-    return _ranked_preferred_first(results, limit)
+    return _ranked_by(results, _tv_anticipation, limit)
 
 
 def fetch_popular_shows_last_month(target: date = None, limit: int = 3) -> list[dict]:
@@ -293,7 +371,7 @@ def fetch_popular_shows_last_month(target: date = None, limit: int = 3) -> list[
             break
         page += 1
 
-    return _ranked_preferred_first(results, limit)
+    return _ranked_by(results, _tv_anticipation, limit)
 
 
 def get_show_vote_average(show: dict) -> float:
